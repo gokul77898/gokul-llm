@@ -1,0 +1,29 @@
+model:
+  input_dim: 128
+  hidden_dim: 64
+  num_layers: 2
+  dropout: 0.1
+
+training:
+  batch_size: 8
+  num_epochs: 1
+  learning_rate: 0.001
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  logging_steps: 5
+  save_steps: 50
+  num_workers: 0
+
+data:
+  train_file: "data/rl_train.jsonl"
+  val_file: "data/rl_val.jsonl"
+  max_samples: 50
+
+paths:
+  checkpoint_dir: "checkpoints/rlhf/reward"
+  log_dir: "logs/rlhf/reward"
+
+system:
+  device: "cpu"
+  seed: 42
+  use_wandb: false

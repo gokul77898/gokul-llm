@@ -1,0 +1,14 @@
+model_routing:
+  enable_mamba: true
+  mamba_threshold_tokens: 4096
+  mamba_min_pages: 3
+  mamba_keywords:
+    - judgment
+    - order
+    - case
+    - verdict
+    - appellate
+    - "supreme court"
+    - judgment
+  default_model: transformer
+  fallback_to_transformer: true

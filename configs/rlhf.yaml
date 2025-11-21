@@ -1,0 +1,53 @@
+# RLHF Training Configuration
+# Reinforcement Learning from Human Feedback
+
+# SAFETY: RLHF is disabled by default
+enabled: false
+
+# Reward model configuration
+reward_model:
+  base_model: "gpt2"  # Base model for reward modeling
+  checkpoint: null
+  hidden_size: 768
+  num_labels: 1  # Scalar reward
+  
+# PPO configuration
+ppo:
+  learning_rate: 1.4e-5
+  batch_size: 8
+  mini_batch_size: 4
+  gradient_accumulation_steps: 1
+  ppo_epochs: 4
+  max_grad_norm: 0.5
+  clip_range: 0.2
+  value_clip_range: 0.2
+  gamma: 1.0  # Discount factor
+  lam: 0.95  # GAE lambda
+  
+# Training configuration
+training:
+  num_episodes: 1000
+  max_steps_per_episode: 512
+  save_freq: 100
+  eval_freq: 50
+  
+# Data configuration
+data:
+  preference_data: "data/preference_pairs.jsonl"  # Human preferences
+  validation_data: "data/val_sft.jsonl"
+  
+# Output
+output:
+  checkpoint_dir: "checkpoints/rlhf/"
+  model_name: "rl_trained_lora"
+  save_total_limit: 3
+  
+# Hardware
+hardware:
+  device: "auto"
+  fp16: false
+  
+# Logging
+logging:
+  log_dir: "logs/rlhf"
+  wandb: false

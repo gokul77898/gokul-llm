@@ -1,0 +1,48 @@
+# Transformer Model Configuration
+# Fallback configuration when Mamba2 is not available
+
+model:
+  name: "transformer"
+  backend: "transformer"
+  model_name: "gpt2"  # Using GPT-2 as base transformer
+  device: "mps"  # Mac Metal Performance Shaders
+  precision: "fp16"
+  max_seq_len: 1024
+  cache_dir: "./models/cache"
+
+# LoRA Configuration for Transformer
+lora:
+  r: 8
+  alpha: 32
+  dropout: 0.1
+  target_modules:
+    - "c_attn"    # Attention projection
+    - "c_proj"    # Output projection
+    - "c_fc"      # Feed-forward layer
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+# Training Configuration
+training:
+  batch_size: 4
+  learning_rate: 2e-4
+  num_epochs: 3
+  gradient_accumulation_steps: 4
+  warmup_steps: 100
+  max_grad_norm: 1.0
+  weight_decay: 0.01
+
+# Generation Configuration
+generation:
+  max_new_tokens: 256
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
+  pad_token_id: 50256  # GPT-2 EOS token
+
+# Device and Performance
+device:
+  auto_detect: true
+  fallback_order: ["mps", "cuda", "cpu"]
+  mixed_precision: true

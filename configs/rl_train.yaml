@@ -1,0 +1,47 @@
+# RL Training Configuration
+model:
+  policy_model: "ppo"  # ppo, dqn
+  base_model: "gpt2"
+  hidden_dim: 256
+  n_layers: 2
+  action_space: 10
+
+training:
+  total_timesteps: 10000
+  n_steps: 128
+  batch_size: 32
+  n_epochs: 4
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  ent_coef: 0.01
+  max_grad_norm: 0.5
+  gradient_accumulation_steps: 1
+  mixed_precision: false
+
+environment:
+  task_type: "summarization"  # summarization, qa, classification
+  max_episode_steps: 50
+  vocab_size: 1000
+  max_length: 128
+
+data:
+  train_file: "data/rl_train.jsonl"
+  val_file: "data/rl_val.jsonl"
+  max_samples: 200
+
+paths:
+  checkpoint_dir: "checkpoints/rl"
+  log_dir: "logs/rl"
+
+evaluation:
+  eval_freq: 1000
+  n_eval_episodes: 10
+
+system:
+  device: "cuda"
+  seed: 42
+  use_wandb: false
+  wandb_project: "mark-rl"

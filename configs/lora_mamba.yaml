@@ -1,0 +1,54 @@
+training:
+  dry_run: true
+  epochs: 3
+  batch_size: 1
+  gradient_accumulation_steps: 8
+  learning_rate: 1.0e-4
+  warmup_steps: 100
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+  max_grad_norm: 1.0
+  weight_decay: 0.01
+
+lora:
+  r: 8
+  lora_alpha: 32
+  lora_dropout: 0.1
+  # Target modules are AUTO-SELECTED based on detected backend:
+  #   - REAL Mamba SSM (Linux/Windows+CUDA): ["in_proj", "out_proj", "x_proj", "dt_proj"]
+  #   - Mamba2 (Mac): ["mixer.Wq", "mixer.Wk", "mixer.Wv"]
+  #   - Transformer (fallback): ["c_attn", "c_proj"]
+  # The trainer will automatically select the correct modules
+  target_modules:
+    - "in_proj"      # REAL Mamba SSM: input projection
+    - "out_proj"     # REAL Mamba SSM: output projection
+    - "x_proj"       # REAL Mamba SSM: state projection
+    - "dt_proj"      # REAL Mamba SSM: delta projection
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+model:
+  name: "mamba"
+  # Auto-detection will select the appropriate model:
+  base_model: "state-spaces/mamba-130m"  # REAL Mamba SSM (CUDA)
+  mamba2_model: "mamba2-base"             # Mamba2 (Mac)
+
+data:
+  train_file: "data/legal_qa_train.jsonl"
+  val_file: "data/legal_qa_val.jsonl"
+  max_seq_length: 8192
+
+output:
+  checkpoint_dir: "checkpoints/lora"
+  model_name: "mamba_lora"
+  save_total_limit: 3
+
+hardware:
+  device: "auto"
+  fp16: false
+  bf16: false
+
+logging:
+  report_to: "none"
+  logging_dir: "logs/lora_mamba"

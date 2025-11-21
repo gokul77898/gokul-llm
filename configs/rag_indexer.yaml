@@ -1,0 +1,31 @@
+# RAG Indexer Configuration
+model:
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+  embedding_dim: 384
+  normalize_embeddings: true
+
+indexer:
+  index_type: "Flat"  # Flat, IVF, HNSW
+  metric: "cosine"  # cosine, l2
+  batch_size: 32
+  use_gpu: false
+
+data:
+  documents_file: "data/documents.jsonl"
+  max_documents: 10000
+  min_doc_length: 50
+
+paths:
+  index_path: "checkpoints/rag/faiss.index"
+  metadata_path: "checkpoints/rag/metadata.json"
+  embeddings_cache: "checkpoints/rag/embeddings.npy"
+
+evaluation:
+  eval_file: "data/rag_eval.jsonl"
+  top_k: [1, 3, 5, 10]
+  metrics: ["recall", "mrr", "ndcg"]
+
+system:
+  device: "cpu"
+  seed: 42
+  num_workers: 4

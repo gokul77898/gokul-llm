@@ -1,0 +1,28 @@
+model:
+  base_model: "mamba"
+  d_model: 128
+  max_length: 256
+
+training:
+  batch_size: 4
+  num_epochs: 1
+  learning_rate: 0.0001
+  beta: 0.1
+  max_grad_norm: 1.0
+  logging_steps: 10
+  save_steps: 50
+  num_workers: 0
+
+data:
+  train_file: "data/rl_train.jsonl"
+  val_file: "data/rl_val.jsonl"
+  max_samples: 50
+
+paths:
+  checkpoint_dir: "checkpoints/rlhf/dpo"
+  log_dir: "logs/rlhf/dpo"
+
+system:
+  device: "cpu"
+  seed: 42
+  use_wandb: false

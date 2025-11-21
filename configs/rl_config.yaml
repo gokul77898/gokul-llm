@@ -1,0 +1,71 @@
+# Reinforcement Learning Configuration
+
+task:
+  type: "summarization"  # "summarization", "qa", "classification", "ner"
+  max_steps: 100
+
+model:
+  vocab_size: 30000
+  d_model: 512
+  num_layers: 4
+  num_heads: 8
+  num_classes: 5  # For classification task
+
+agent:
+  type: "ppo"  # "ppo" or "dqn"
+  learning_rate: 3e-4
+  batch_size: 64
+  
+  # PPO-specific
+  n_steps: 2048
+  n_epochs: 10
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  ent_coef: 0.01  # Entropy coefficient
+  vf_coef: 0.5    # Value function coefficient
+  max_grad_norm: 0.5
+  
+  # DQN-specific
+  buffer_size: 100000
+  learning_starts: 1000
+  train_freq: 4
+  gradient_steps: 1
+  target_update_interval: 1000
+  exploration_fraction: 0.1
+  exploration_initial_eps: 1.0
+  exploration_final_eps: 0.05
+
+training:
+  total_timesteps: 100000
+  eval_episodes: 10
+  eval_freq: 10000
+  save_freq: 50000
+  checkpoint_dir: "./checkpoints/rl"
+  log_dir: "./logs/rl"
+
+environment:
+  num_envs: 1  # Number of parallel environments
+  max_length: 512
+  
+reward:
+  weights:
+    accuracy: 1.0
+    relevance: 0.5
+    coherence: 0.3
+    completeness: 0.4
+    legal_compliance: 0.6
+  use_shaped_rewards: true
+
+curriculum:
+  enabled: false
+  difficulty_levels:
+    - name: "easy"
+      max_length: 100
+      timesteps: 20000
+    - name: "medium"
+      max_length: 200
+      timesteps: 30000
+    - name: "hard"
+      max_length: 512
+      timesteps: 50000

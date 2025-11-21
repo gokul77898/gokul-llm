@@ -1,0 +1,36 @@
+model:
+  obs_dim: 128
+  action_dim: 50
+  hidden_dim: 64
+  num_layers: 2
+
+training:
+  total_timesteps: 500
+  n_steps: 32
+  batch_size: 16
+  n_epochs: 2
+  learning_rate: 0.0003
+  gamma: 0.99
+  gae_lambda: 0.95
+  clip_range: 0.2
+  vf_coef: 0.5
+  ent_coef: 0.01
+  max_grad_norm: 0.5
+  logging_steps: 50
+
+environment:
+  max_episode_steps: 20
+  vocab_size: 50
+
+data:
+  train_file: "data/rl_train.jsonl"
+  max_samples: 20
+
+paths:
+  checkpoint_dir: "checkpoints/rlhf/ppo"
+  log_dir: "logs/rlhf/ppo"
+
+system:
+  device: "cpu"
+  seed: 42
+  use_wandb: false

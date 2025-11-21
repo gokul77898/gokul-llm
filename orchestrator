@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+"""Convenience script for training orchestrator"""
+
+import sys
+from src.training.orchestrator import main
+
+if __name__ == '__main__':
+    main()

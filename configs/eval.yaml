@@ -1,0 +1,41 @@
+# Evaluation Configuration
+
+# Model to evaluate
+model:
+  name: "mamba_lora"  # Model ID from registry
+  checkpoint: null  # Use default from registry
+  
+# Dataset
+dataset:
+  file: "data/val_sft.jsonl"
+  max_samples: 100  # Limit for quick eval
+  
+# Metrics to compute
+metrics:
+  - "exact_match"  # Exact string match
+  - "f1"  # Token-level F1
+  - "rouge_l"  # ROUGE-L score
+  - "bleu"  # BLEU score
+  
+# Generation parameters
+generation:
+  max_length: 256
+  temperature: 0.7
+  top_p: 0.9
+  num_beams: 1  # 1 for sampling, >1 for beam search
+  
+# Retrieval (for RAG eval)
+retrieval:
+  enabled: true
+  collection: "pdf_docs"
+  top_k: 3
+  
+# Output
+output:
+  report_dir: "reports/"
+  save_predictions: true
+  
+# Hardware
+hardware:
+  device: "auto"
+  batch_size: 4

@@ -1,0 +1,45 @@
+training:
+  dry_run: true
+  epochs: 3
+  batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  warmup_steps: 100
+  logging_steps: 10
+  save_steps: 500
+  eval_steps: 500
+  max_grad_norm: 1.0
+  weight_decay: 0.01
+
+lora:
+  r: 8
+  lora_alpha: 32
+  lora_dropout: 0.1
+  target_modules:
+    - c_attn
+    - c_proj
+  bias: "none"
+  task_type: "CAUSAL_LM"
+
+model:
+  name: "transformer"
+  base_model: "gpt2"
+
+data:
+  train_file: "data/legal_qa_train.jsonl"
+  val_file: "data/legal_qa_val.jsonl"
+  max_seq_length: 1024
+
+output:
+  checkpoint_dir: "checkpoints/lora"
+  model_name: "transformer_lora"
+  save_total_limit: 3
+
+hardware:
+  device: "auto"
+  fp16: false
+  bf16: false
+
+logging:
+  report_to: "none"
+  logging_dir: "logs/lora_transformer"
