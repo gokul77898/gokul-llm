@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoE Test</title>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <h1>MoE API Test</h1>
+    <div>
+        <textarea id="text" placeholder="Enter legal text..." rows="4" cols="50"></textarea><br><br>
+        <select id="task">
+            <option value="qa">Question Answering</option>
+            <option value="ner">Named Entity Recognition</option>
+            <option value="similarity">Similarity</option>
+        </select><br><br>
+        <button onclick="testMoE()">Test MoE</button>
+    </div>
+    <div id="result" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;"></div>
+
+    <script>
+        async function testMoE() {
+            const text = document.getElementById('text').value;
+            const task = document.getElementById('task').value;
+            const resultDiv = document.getElementById('result');
+            
+            if (!text.trim()) {
+                resultDiv.innerHTML = '<p style="color: red;">Please enter some text</p>';
+                return;
+            }
+            
+            resultDiv.innerHTML = '<p>Loading...</p>';
+            
+            try {
+                const response = await axios.post('http://localhost:8000/moe-generate', {
+                    text: text,
+                    task: task,
+                    max_tokens: 256
+                });
+                
+                const data = response.data;
+                resultDiv.innerHTML = `
+                    <h3>Results:</h3>
+                    <p><strong>Expert:</strong> ${data.expert}</p>
+                    <p><strong>Routing Reason:</strong> ${data.routing_reason}</p>
+                    <p><strong>Output:</strong> ${data.output}</p>
+                    <p><strong>Tokens:</strong> ${data.tokens}</p>
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.response?.data?.detail || error.message}</p>`;
+            }
+        }
+    </script>
+</body>
+</html>

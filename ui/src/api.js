@@ -40,7 +40,23 @@ export const getModels = async () => {
     console.error('Failed to fetch models:', error)
     // Return default models if API fails
     return {
-      models: ['mamba', 'transformer', 'rl_trained']
+      models: ['inlegalbert', 'incaselawbert']
+    }
+  }
+}
+
+export const runMoE = async (text, task) => {
+  try {
+    const payload = { text, task, max_tokens: 256 }
+    const response = await api.post('/moe-generate', payload)
+    return response.data
+  } catch (error) {
+    if (error.response) {
+      throw new Error(error.response.data.detail || error.response.data.message || 'MoE generation failed')
+    } else if (error.request) {
+      throw new Error('Backend not responding. Please ensure the MoE API is running at ' + API_BASE_URL)
+    } else {
+      throw new Error(error.message || 'MoE generation failed')
     }
   }
 }

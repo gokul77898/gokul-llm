@@ -1,0 +1,124 @@
+"""Unified Model Registry for MARK MoE System (Pure HF)"""
+
+import logging
+from pathlib import Path
+from typing import Dict, Any, Optional, List
+from dataclasses import dataclass, field
+import yaml
+import torch
+from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class ExpertInfo:
+    """Information about a registered expert model"""
+    name: str
+    model_id: str
+    task_types: List[str]
+    token_window: int
+    tuning: str
+    lora_config: Dict[str, Any] = field(default_factory=dict)
+    priority_score: float = 1.0
+    device: str = "cuda" if torch.cuda.is_available() else "cpu"
+
+class ModelRegistry:
+    """Central registry for all MARK MoE experts"""
+    
+    def __init__(self, config_path: str = "configs/moe_experts.yaml"):
+        self.experts: Dict[str, ExpertInfo] = {}
+        self.config_path = config_path
+        self._load_registry()
+    
+    def _load_registry(self):
+        """Load experts from YAML config"""
+        path = Path(self.config_path)
+        if not path.exists():
+            logger.warning(f"Config file {path} not found. Registry empty.")
+            return
+
+        with open(path, 'r') as f:
+            config = yaml.safe_load(f)
+        
+        for expert_cfg in config.get('experts', []):
+            expert = ExpertInfo(
+                name=expert_cfg['name'],
+                model_id=expert_cfg['model_id'],
+                task_types=expert_cfg['task_types'],
+                token_window=expert_cfg.get('token_window', 512),
+                tuning=expert_cfg.get('tuning', 'lora'),
+                lora_config=expert_cfg.get('lora', {}),
+                priority_score=expert_cfg.get('priority_score', 1.0)
+            )
+            self.experts[expert.name] = expert
+            logger.info(f"Registered expert: {expert.name} ({expert.model_id})")
+
+    def get_expert(self, name: str) -> Optional[ExpertInfo]:
+        """Get info for a specific expert"""
+        return self.experts.get(name)
+
+    def list_experts(self) -> List[ExpertInfo]:
+        """List all registered experts"""
+        return list(self.experts.values())
+
+    def get_experts_by_task(self, task: str) -> List[ExpertInfo]:
+        """Find experts suitable for a specific task"""
+        return [e for e in self.experts.values() if task in e.task_types]
+
+# Global registry instance
+_registry = ModelRegistry()
+
+def get_registry() -> ModelRegistry:
+    """Get the global model registry"""
+    return _registry
+
+def load_expert_model(expert_name: str, device: Optional[str] = None):
+    """
+    Load a specific expert model from HF.
+    
+    Args:
+        expert_name: Name of the expert
+        device: 'cuda' or 'cpu' (defaults to registry setting)
+        
+    Returns:
+        (model, tokenizer)
+    """
+    expert = _registry.get_expert(expert_name)
+    if not expert:
+        raise ValueError(f"Expert {expert_name} not found in registry.")
+    
+    target_device = device or expert.device
+    
+    # Check local path first
+    local_path = Path("experts") / expert.name
+    if local_path.exists() and (local_path / "config.json").exists():
+        model_source = str(local_path)
+        logger.info(f"Loading expert {expert_name} from local path: {model_source}")
+    else:
+        model_source = expert.model_id
+        logger.info(f"Loading expert {expert_name} from HF: {model_source}")
+    
+    logger.info(f"Target device: {target_device}")
+
+    try:
+        tokenizer = AutoTokenizer.from_pretrained(model_source)
+        
+        # Determine model class based on task/config (heuristic)
+        if "llama" in expert.model_id.lower() or "gpt" in expert.model_id.lower():
+            model = AutoModelForCausalLM.from_pretrained(
+                model_source, 
+                torch_dtype=torch.float16 if target_device == "cuda" else torch.float32,
+                device_map=None # We handle to(device) manually to avoid issues if needed, or use device_map="auto"
+            ).to(target_device)
+        else:
+            # Default fallback for BERT-like models
+            model = AutoModelForSequenceClassification.from_pretrained(
+                 model_source,
+                 num_labels=2 # Placeholder
+            ).to(target_device)
+
+        return model, tokenizer
+        
+    except Exception as e:
+        logger.error(f"Failed to load expert {expert_name}: {e}")
+        raise e

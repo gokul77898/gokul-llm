@@ -2,7 +2,7 @@ import { useState } from 'react'
 
 const QueryForm = ({ onSubmit, loading }) => {
   const [query, setQuery] = useState('')
-  const [model, setModel] = useState('mamba')
+  const [model, setModel] = useState('auto')
   const [topK, setTopK] = useState(5)
 
   const handleSubmit = (e) => {
@@ -39,20 +39,21 @@ const QueryForm = ({ onSubmit, loading }) => {
             Model Selection
           </label>
           <select
-            id="model"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={model}
             onChange={(e) => setModel(e.target.value)}
             disabled={loading}
           >
-            <option value="mamba">Mamba (Hierarchical Attention)</option>
-            <option value="transformer">Transformer (BERT-based)</option>
-            <option value="rl_trained">RL Optimized (PPO fine-tuned)</option>
+            <option value="auto">Auto (MoE Router)</option>
+            <option value="inlegalbert">InLegalBERT (NER, Classification)</option>
+            <option value="incaselawbert">InCaseLawBERT (Case Analysis)</option>
+            <option value="indicbert">IndicBERT (Semantic Analysis)</option>
           </select>
           <p className="mt-2 text-xs text-gray-500">
-            {model === 'mamba' && '🔹 Best for long documents with hierarchical structure'}
-            {model === 'transformer' && '🔹 Best for classification and NER tasks'}
-            {model === 'rl_trained' && '🔹 RLHF-optimized for human-aligned responses. Uses policy checkpoint from checkpoints/rlhf/ppo/ppo_final.pt'}
+            {model === 'auto' && '🤖 Automatically routes to the best expert based on your query'}
+            {model === 'inlegalbert' && '🔹 Best for named entity recognition and legal classification'}
+            {model === 'incaselawbert' && '🔹 Specialized for case law analysis and legal reasoning'}
+            {model === 'indicbert' && '🔹 Optimized for semantic analysis and question answering'}
           </p>
         </div>
 

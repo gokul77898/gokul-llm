@@ -6,6 +6,7 @@ import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
 import { Send, Menu, Plus, Sun, Moon, Copy, RotateCcw, Check } from 'lucide-react';
 import { queryAPI } from '../api';
+import ResultCard from './ResultCard';
 
 const ChatGPT = () => {
   // State
@@ -82,7 +83,8 @@ const ChatGPT = () => {
       const response = await queryAPI({
         query: input,
         model: 'auto',
-        top_k: 5
+        top_k: 5,
+        task: 'qa'  // Default to QA, could be made dynamic
       });
 
       // Remove typing indicator
@@ -96,7 +98,9 @@ const ChatGPT = () => {
         confidence: response.confidence,
         sources: response.sources || [],
         retrieved_docs: response.retrieved_docs || 0,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        raw: response,  // Pass raw backend response
+        metadata: response.metadata
       };
 
       const newMessages = [...messages, userMessage, assistantMessage];
@@ -334,10 +338,14 @@ const MessageBubble = ({ message, darkMode, onCopy, copied }) => {
 
           {/* Content */}
           <div className="flex-1 space-y-2">
-            <div className={`prose prose-sm max-w-none ${darkMode ? 'prose-invert' : ''}`}>
-              {message.role === 'user' ? (
+            {message.role === 'user' ? (
+              <div className={`prose prose-sm max-w-none ${darkMode ? 'prose-invert' : ''}`}>
                 <p className={darkMode ? 'text-white' : 'text-gray-900'}>{message.content}</p>
-              ) : (
+              </div>
+            ) : message.role === 'assistant' && message.raw ? (
+              <ResultCard result={message.raw} />
+            ) : (
+              <div className={`prose prose-sm max-w-none ${darkMode ? 'prose-invert' : ''}`}>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   components={{
@@ -362,8 +370,8 @@ const MessageBubble = ({ message, darkMode, onCopy, copied }) => {
                 >
                   {message.content}
                 </ReactMarkdown>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Metadata */}
             {message.model && (

@@ -3,7 +3,7 @@ import { useState } from 'react'
 const ChatMode = ({ onSubmit, loading }) => {
   const [query, setQuery] = useState('')
   const [messages, setMessages] = useState([])
-  const [model, setModel] = useState('mamba')
+  const [model, setModel] = useState('auto')
   const [topK, setTopK] = useState(5)
 
   const handleSubmit = async (e) => {
@@ -102,9 +102,10 @@ const ChatMode = ({ onSubmit, loading }) => {
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
               disabled={loading}
             >
-              <option value="mamba">Mamba</option>
-              <option value="transformer">Transformer</option>
-              <option value="rl_trained">RL Optimized</option>
+              <option value="auto">Auto (MoE)</option>
+              <option value="inlegalbert">InLegalBERT</option>
+              <option value="incaselawbert">InCaseLawBERT</option>
+              <option value="indicbert">IndicBERT</option>
             </select>
             <input
               type="number"

@@ -1,74 +1,76 @@
-const ResultCard = ({ result }) => {
-  const confidenceColor = result.confidence >= 0.7 
-    ? 'text-green-600' 
-    : result.confidence >= 0.4 
-    ? 'text-yellow-600' 
-    : 'text-red-600'
+import React from "react";
 
-  const confidenceLabel = result.confidence >= 0.7 
-    ? 'High' 
-    : result.confidence >= 0.4 
-    ? 'Medium' 
-    : 'Low'
+export default function ResultCard({ result }) {
+  if (!result) return null;
+
+  // Normalize incoming backend response
+  const { type, text, model, confidence, label, entities } = result.answer || result;
 
   return (
-    <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-4">
-        <h3 className="text-xl font-bold text-white">Query Results</h3>
-      </div>
+    <div className="p-4 border rounded-lg shadow bg-white my-3">
+      <h3 className="text-lg font-bold mb-2">Model: {model}</h3>
 
-      <div className="p-6 space-y-6">
-        {/* Answer Section */}
+      {/* GENERATION RESULT */}
+      {type === "generation" && (
+        <p className="whitespace-pre-wrap text-gray-800">
+          {text}
+        </p>
+      )}
+
+      {/* CLASSIFICATION */}
+      {type === "classification" && (
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Answer</h4>
-            <span className={`text-xs font-medium ${confidenceColor}`}>
-              {confidenceLabel} Confidence
-            </span>
-          </div>
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            {result.answer ? (
-              <p className="text-gray-800 leading-relaxed">{result.answer}</p>
-            ) : (
-              <p className="text-gray-500 italic">No answer generated</p>
-            )}
-          </div>
+          <p className="text-gray-800">
+            <strong>Predicted Label:</strong> {label}
+          </p>
+          <p className="text-gray-600">
+            <strong>Confidence:</strong> {(confidence * 100).toFixed(1)}%
+          </p>
         </div>
+      )}
 
-        {/* Metadata Grid */}
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
-            <p className="text-xs font-medium text-blue-600 mb-1">Confidence Score</p>
-            <p className="text-2xl font-bold text-blue-900">
-              {(result.confidence * 100).toFixed(1)}%
+      {/* NER */}
+      {type === "ner" && (
+        <div>
+          <strong>Named Entities:</strong>
+          <ul className="mt-2">
+            {entities && entities.map((e, i) => (
+              <li key={i} className="text-gray-800">
+                <span className="font-mono bg-gray-200 p-1 rounded">{e.token}</span>
+                {" → "}
+                <span className="font-bold">{e.label}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* FALLBACK - Show raw answer if no specific type */}
+      {(!type || type === "unknown") && (
+        <div>
+          <p className="text-gray-800 whitespace-pre-wrap">
+            {result.answer || text || "No response available"}
+          </p>
+          {result.confidence && (
+            <p className="text-gray-600 mt-2">
+              <strong>Confidence:</strong> {(result.confidence * 100).toFixed(1)}%
             </p>
-          </div>
-          <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
-            <p className="text-xs font-medium text-purple-600 mb-1">Documents Retrieved</p>
-            <p className="text-2xl font-bold text-purple-900">{result.retrieved_docs}</p>
-          </div>
+          )}
         </div>
+      )}
 
-        {/* Model Info */}
-        <div className="flex items-center space-x-2 text-sm text-gray-600 bg-gray-50 rounded-lg p-3">
-          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <span>Model: <span className="font-semibold">{result.model}</span></span>
-          <span className="text-gray-400">•</span>
-          <span>Query: <span className="font-semibold">{result.query?.substring(0, 30)}...</span></span>
+      {/* Metadata */}
+      {result.metadata && (
+        <div className="mt-3 text-sm text-gray-500 border-t pt-2">
+          <p><strong>Expert:</strong> {result.metadata.expert_used}</p>
+          {result.metadata.task_type && (
+            <p><strong>Task:</strong> {result.metadata.task_type}</p>
+          )}
+          {result.metadata.routing_score && (
+            <p><strong>Routing Score:</strong> {result.metadata.routing_score}</p>
+          )}
         </div>
-
-        {/* Timestamp */}
-        {result.timestamp && (
-          <div className="text-xs text-gray-500 border-t pt-3">
-            Generated at: {new Date(result.timestamp).toLocaleString()}
-          </div>
-        )}
-      </div>
+      )}
     </div>
-  )
+  );
 }
-
-export default ResultCard

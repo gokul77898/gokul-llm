@@ -77,17 +77,21 @@ const EvaluationDashboard = () => {
                 Select Model
               </label>
               <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
                 disabled={loading}
               >
-                <option value="mamba">Mamba (Hierarchical Attention)</option>
-                <option value="transformer">Transformer (BERT-based)</option>
-                <option value="rl_trained">RL Trained (PPO Optimized)</option>
+                <option value="auto">Auto (MoE Router)</option>
+                <option value="inlegalbert">InLegalBERT (NER, Classification)</option>
+                <option value="incaselawbert">InCaseLawBERT (Case Analysis)</option>
+                <option value="indicbert">IndicBERT (Semantic Analysis)</option>
               </select>
               <p className="text-xs text-gray-500 mt-1">
-                {model === 'rl_trained' && '🔹 RLHF-optimized for human-aligned responses'}
+                {selectedModel === 'auto' && '🤖 Automatically routes to the best expert based on your query'}
+                {selectedModel === 'inlegalbert' && '🔹 Best for named entity recognition and legal classification'}
+                {selectedModel === 'incaselawbert' && '🔹 Specialized for case law analysis and legal reasoning'}
+                {selectedModel === 'indicbert' && '🔹 Optimized for semantic analysis and question answering'}
               </p>
             </div>
 

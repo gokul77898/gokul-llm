@@ -4,9 +4,10 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import { queryAPI, getModels } from '../api'
 
 const MODEL_LABELS = {
-  'mamba': 'Mamba (Hierarchical Attention)',
-  'transformer': 'Transformer (BERT-based)',
-  'rl_trained': 'RL Trained (PPO Optimized)'
+  'auto': 'Auto (MoE Router)',
+  'inlegalbert': 'InLegalBERT (NER, Classification)',
+  'incaselawbert': 'InCaseLawBERT (Case Analysis)',
+  'indicbert': 'IndicBERT (Semantic Analysis)'
 }
 
 const UnifiedDashboard = () => {
@@ -19,7 +20,7 @@ const UnifiedDashboard = () => {
   const [error, setError] = useState(null)
 
   // Available models
-  const [availableModels, setAvailableModels] = useState(['mamba', 'transformer', 'rl_trained'])
+  const [availableModels, setAvailableModels] = useState(['auto', 'inlegalbert', 'incaselawbert', 'indicbert'])
 
   // Chat history
   const [chatHistory, setChatHistory] = useState([])
@@ -298,9 +299,9 @@ const UnifiedDashboard = () => {
                       <strong>Model:</strong> {msg.auto_model_used || msg.model} • 
                       <strong>Confidence:</strong> {(msg.confidence*100).toFixed(1)}% • 
                       <strong>Sources:</strong> {msg.retrieved_docs} docs
-                      {msg.ensemble && (
+                      {msg.expert && (
                         <div className="text-xs mt-1 text-gray-600">
-                          Ensemble: RL {(msg.ensemble.rl_conf*100).toFixed(1)}% | Mamba {(msg.ensemble.mamba_conf*100).toFixed(1)}%
+                          Expert: {msg.expert} | Confidence: {(msg.confidence*100).toFixed(1)}%
                         </div>
                       )}
                     </div>

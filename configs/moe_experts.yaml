@@ -1,0 +1,17 @@
+experts:
+  - name: inlegalbert
+    model_id: "law-ai/InLegalBERT"
+    task_types: ["ner", "classification"]
+    priority_score: 1.0
+
+  - name: incaselawbert
+    model_id: "law-ai/InCaseLawBERT"
+    task_types: ["case-classification", "legal-reasoning", "similarity"]
+    priority_score: 0.96
+
+  - name: gemma-legal
+    model_id: "google/gemma-2b-it"
+    task_types: ["qa", "summarization", "generation", "reasoning"]
+    priority_score: 0.88
+    token_window: 8192
+
