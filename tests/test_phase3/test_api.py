@@ -63,7 +63,7 @@ def test_query_endpoint(client):
             "/query",
             json={
                 "query": "What is contract law?",
-                "model": "mamba",
+                "model": "transformer",
                 "top_k": 3,
                 "max_length": 128
             }
@@ -113,7 +113,7 @@ def test_generate_endpoint(client):
             "/generate",
             json={
                 "prompt": "Test prompt",
-                "model": "mamba",
+                "model": "transformer",
                 "max_length": 128
             }
         )

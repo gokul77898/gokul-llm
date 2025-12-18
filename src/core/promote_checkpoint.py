@@ -11,7 +11,7 @@ def main():
     args = parser.parse_args()
     
     src = Path(args.from_path)
-    dst = Path(f"checkpoints/rlhf/{args.to}/model_final.pt")
+    dst = Path(f"checkpoints/training/{args.to}/model_final.pt")
     
     if not src.exists():
         logger.error(f"Source not found: {src}")

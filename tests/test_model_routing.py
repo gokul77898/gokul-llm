@@ -1,7 +1,7 @@
 """
 Tests for Model Routing Logic
 
-Tests the auto-routing between Mamba and Transformer models.
+Tests the auto-routing between Transformer models.
 """
 
 import pytest
@@ -31,11 +31,11 @@ class TestModelRouting:
         
         selected = self.pipeline.select_model(query, doc_count, context_text, retrieved_docs)
         
-        # Should select transformer (or fallback to it if Mamba unavailable)
-        assert selected in ['transformer', 'mamba'], f"Unexpected model: {selected}"
+        # Should select transformer
+        assert selected == 'transformer', f"Unexpected model: {selected}"
     
-    def test_long_context_routes_to_mamba(self):
-        """Long context (>4096 tokens) should route to Mamba if available"""
+    def test_long_context_routes_to_transformer(self):
+        """Long context (>4096 tokens) should route to Transformer"""
         query = "Explain the judgment"
         
         # Create long context text (>4096 tokens estimated)
@@ -49,15 +49,15 @@ class TestModelRouting:
         
         selected = self.pipeline.select_model(query, len(retrieved_docs), context_text, retrieved_docs)
         
-        # Should attempt to select mamba, but may fallback to transformer if unavailable
-        assert selected in ['mamba', 'transformer'], f"Unexpected model: {selected}"
+        # Should select transformer
+        assert selected == 'transformer', f"Unexpected model: {selected}"
         
         # Verify token estimation works
         token_est = estimate_tokens(context_text)
         assert token_est > 1000, "Token estimation failed"
     
-    def test_multi_page_routes_to_mamba(self):
-        """Documents with >=3 pages should route to Mamba if available"""
+    def test_multi_page_routes_to_transformer(self):
+        """Documents with >=3 pages should route to Transformer"""
         query = "Summarize the case"
         
         retrieved_docs = [
@@ -73,11 +73,11 @@ class TestModelRouting:
         context_text = "short context"
         selected = self.pipeline.select_model(query, len(retrieved_docs), context_text, retrieved_docs)
         
-        # Should attempt mamba, or fallback
-        assert selected in ['mamba', 'transformer'], f"Unexpected model: {selected}"
+        # Should select transformer
+        assert selected == 'transformer', f"Unexpected model: {selected}"
     
-    def test_legal_keywords_route_to_mamba(self):
-        """Queries with legal keywords should route to Mamba if available"""
+    def test_legal_keywords_route_to_transformer(self):
+        """Queries with legal keywords should route to Transformer"""
         test_cases = [
             "What is the supreme court judgment on this case?",
             "Explain the appellate verdict",
@@ -86,32 +86,32 @@ class TestModelRouting:
         
         for query in test_cases:
             selected = self.pipeline.select_model(query, 2, query, [])
-            assert selected in ['mamba', 'transformer'], f"Unexpected model for query: {query}"
+            assert selected == 'transformer', f"Unexpected model for query: {query}"
     
-    def test_fallback_when_mamba_unavailable(self):
-        """Should fallback to transformer if Mamba unavailable"""
-        # Test with routing config that enables Mamba but it's not available
+    def test_fallback_when_transformer_unavailable(self):
+        """Should fallback to default transformer if transformer unavailable"""
+        # Test with routing config that enables Transformer but it's not available
         query = "judgment" * 1000  # Long query with keyword
         context_text = query
         
         selected = self.pipeline.select_model(query, 1, context_text, [])
         
-        # If Mamba unavailable, should fallback to transformer
-        # If Mamba available, will select mamba
-        assert selected in ['mamba', 'transformer'], f"Unexpected model: {selected}"
+        # If Transformer unavailable, should fallback to default
+        # If Transformer available, will select transformer
+        assert selected == 'transformer', f"Unexpected model: {selected}"
     
     def test_routing_config_loading(self):
         """Test routing configuration loads correctly"""
         config = self.pipeline.routing_config
         
-        assert 'enable_mamba' in config
-        assert 'mamba_threshold_tokens' in config
-        assert 'mamba_min_pages' in config
+        assert 'enable_transformer' in config
+        assert 'transformer_threshold_tokens' in config
+        assert 'transformer_min_pages' in config
         assert 'default_model' in config
         
         # Check default values or loaded values
-        assert config['mamba_threshold_tokens'] >= 1024
-        assert config['mamba_min_pages'] >= 1
+        assert config['transformer_threshold_tokens'] >= 1024
+        assert config['transformer_min_pages'] >= 1
     
     def test_token_estimation(self):
         """Test token estimation utility"""
@@ -147,12 +147,12 @@ class TestModelRouting:
         assert page_count_none == 0
 
 
-def test_mamba_availability_check():
-    """Test Mamba availability checking"""
+def test_transformer_availability_check():
+    """Test Transformer availability checking"""
     from src.core.model_registry import is_model_available
     
-    # Check if mamba is available (should return True or False, not error)
-    available = is_model_available('mamba')
+    # Check if transformer is available (should return True or False, not error)
+    available = is_model_available('transformer')
     assert isinstance(available, bool)
     
     # Transformer should always be available

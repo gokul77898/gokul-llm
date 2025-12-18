@@ -1,5 +1,5 @@
 # Transformer Model Configuration
-# Fallback configuration when Mamba2 is not available
+# Primary configuration for transformer-based models
 
 model:
   name: "transformer"

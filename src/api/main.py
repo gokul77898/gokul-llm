@@ -267,7 +267,7 @@ if FASTAPI_AVAILABLE:
                     "status": "ready",
                     "message": f"SFT bundle created with {buffer_size} examples",
                     "bundle_path": bundle_path,
-                    "command": f"python -m src.training.sft_train --data {bundle_path} --out checkpoints/rlhf/sft/sft_incremental_$(date +%Y%m%d_%H%M%S).pt"
+                    "command": f"python -m src.training.sft_train --data {bundle_path} --out checkpoints/training/sft/sft_incremental_$(date +%Y%m%d_%H%M%S).pt"
                 }
             else:
                 raise HTTPException(status_code=500, detail="Failed to create SFT bundle")
@@ -339,7 +339,7 @@ if FASTAPI_AVAILABLE:
                 state.fusion_pipeline = get_fusion_pipeline("rl_trained")
             
             if state.fusion_pipeline is None:
-                raise HTTPException(status_code=500, detail="RLHF model not loaded. Please load checkpoint.")
+                raise HTTPException(status_code=500, detail="Training model not loaded. Please load checkpoint.")
             
             # Process query with auto pipeline
             if state.retriever is not None:

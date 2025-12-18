@@ -18,7 +18,7 @@ class ModelType(Enum):
     LEGAL_MODEL = "legal_model"
     LARGE_REASONING = "large_reasoning"
     RL_TRAINED = "rl_trained"
-    MAMBA = "mamba"
+    TRANSFORMER = "transformer"
 
 
 class QueryComplexity(Enum):
@@ -103,8 +103,8 @@ class ModelSelector:
         Selection logic:
         - Simple queries (≤5 words) → RL trained model (fast)
         - Legal queries → RL trained model (legal-specific)
-        - Complex reasoning → Mamba (hierarchical attention)
-        - Long queries (>12 words) → Mamba
+        - Complex reasoning → Transformer-based model
+        - Long queries (>12 words) → Transformer-based model
         - Default → RL trained
         
         Args:
@@ -131,9 +131,9 @@ class ModelSelector:
             selected_model = "rl_trained"
             reason = f"Legal query detected ({analysis['legal_term_count']} legal terms)"
         
-        # Rule 3: Complex reasoning or long queries → Mamba
+        # Rule 3: Complex reasoning or long queries → Transformer-based model
         elif requires_reasoning or word_count > 12 or doc_count > 5:
-            selected_model = "mamba"
+            selected_model = "transformer"
             reason = f"Complex query (reasoning={requires_reasoning}, words={word_count}, docs={doc_count})"
         
         # Default: RL trained

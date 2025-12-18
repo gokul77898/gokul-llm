@@ -2,7 +2,7 @@
 
 # Model to evaluate
 model:
-  name: "mamba_lora"  # Model ID from registry
+  name: "transformer_lora"  # Model ID from registry
   checkpoint: null  # Use default from registry
   
 # Dataset

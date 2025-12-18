@@ -15,13 +15,13 @@ def test_fusion_pipeline_initialization(sample_data):
     """Test fusion pipeline initialization"""
     try:
         pipeline = FusionPipeline(
-            generator_model="mamba",
+            generator_model="transformer",
             retriever_model="rag_encoder",
             device="cpu",
             top_k=3
         )
         
-        assert pipeline.generator_model_name == "mamba"
+        assert pipeline.generator_model_name == "transformer"
         assert pipeline.retriever_model_name == "rag_encoder"
         assert pipeline.top_k == 3
         

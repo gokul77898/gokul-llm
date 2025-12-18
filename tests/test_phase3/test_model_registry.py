@@ -13,7 +13,6 @@ def test_registry_initialization():
     models = registry.list_models()
     
     assert len(models) > 0
-    assert 'mamba' in models
     assert 'transformer' in models
     assert 'rag_encoder' in models
     assert 'rl_trained' in models
@@ -25,7 +24,7 @@ def test_register_model():
     
     registry.register_model(
         name="test_model",
-        architecture="mamba",
+        architecture="transformer",
         config_path="configs/test.yaml",
         checkpoint_path=None,
         description="Test model"
@@ -36,23 +35,23 @@ def test_register_model():
     
     info = registry.get_model_info('test_model')
     assert info.name == "test_model"
-    assert info.architecture == "mamba"
+    assert info.architecture == "transformer"
 
 
 def test_get_model_info():
     """Test getting model info"""
     registry = get_registry()
     
-    info = registry.get_model_info('mamba')
+    info = registry.get_model_info('transformer')
     assert info is not None
-    assert info.architecture == 'mamba'
-    assert 'mamba' in info.config_path
+    assert info.architecture == 'transformer'
+    assert 'transformer' in info.config_path
 
 
-def test_load_mamba_model():
-    """Test loading Mamba model"""
+def test_load_transformer_model():
+    """Test loading Transformer model"""
     try:
-        model, tokenizer, device = load_model('mamba', device='cpu')
+        model, tokenizer, device = load_model('transformer', device='cpu')
         
         assert model is not None
         assert tokenizer is not None

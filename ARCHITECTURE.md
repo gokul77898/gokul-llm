@@ -10,8 +10,8 @@ The Legal AI System is a comprehensive machine learning platform designed for pr
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │  ┌──────────────┐  ┌──────────────┐  ┌─────────┐  ┌──────────┐ │
-│  │   Mamba      │  │  Transfer    │  │   RAG   │  │    RL    │ │
-│  │ Architecture │  │ Architecture │  │ System  │  │  System  │ │
+│  │ Transformer  │  │  Transfer    │  │   RAG   │  │ Training  │ │
+│  │ Architecture │  │ Architecture │  │ System  │  │  System   │ │
 │  └──────────────┘  └──────────────┘  └─────────┘  └──────────┘ │
 │                                                                   │
 └─────────────────────────────────────────────────────────────────┘
@@ -19,9 +19,9 @@ The Legal AI System is a comprehensive machine learning platform designed for pr
 
 ## Component Details
 
-### 1. Mamba Architecture (Long Document Processing)
+### 1. Transformer Architecture (Long Document Processing)
 
-**Purpose**: Process extremely long legal documents while maintaining context
+**Purpose**: Process extremely long legal documents while maintaining context using attention mechanisms
 
 **Architecture**:
 ```
@@ -31,12 +31,10 @@ Document Tokenizer (Chunking + Special Tokens)
       ↓
 Token Embeddings + Positional Encodings
       ↓
-Hierarchical Attention Layers (3 levels)
-  ├─ Token-level Attention
-  ├─ Chunk-level Attention
-  └─ Document-level Attention
-      ↓
-Feedforward Networks
+Multi-Head Attention Layers (Transformer)
+  ├─ Self-Attention
+  ├─ Multi-Head Attention
+  └─ Feed-Forward Networks
       ↓
 Task-Specific Heads
   ├─ Classification Head
@@ -48,10 +46,10 @@ Output (Class or Generated Text)
 **Key Features**:
 - **Custom Tokenizer**: Handles documents up to 100K+ tokens
 - **Sliding Window**: Overlapping chunks preserve context
-- **Hierarchical Attention**: Three-level attention mechanism
-  1. Token-level: Local context within chunks
-  2. Chunk-level: Relations between document sections
-  3. Document-level: Global document understanding
+- **Multi-Head Attention**: Parallel attention mechanisms
+  1. Self-Attention: Local context within chunks
+  2. Multi-Head: Multiple attention heads for different patterns
+  3. Cross-Attention: Relations between document sections
 - **Memory Efficient**: Processes chunks independently
 
 **Use Cases**:
@@ -148,9 +146,9 @@ Generated Answer + Citations
 3. **Generator**: Context-aware text generation
 4. **Pipeline**: End-to-end orchestration
 
-### 4. Reinforcement Learning System
+### 4. Training System (Model Optimization)
 
-**Purpose**: Optimize model outputs through reward feedback
+**Purpose**: Optimize model outputs through supervised fine-tuning and feedback
 
 **Architecture**:
 ```
@@ -159,16 +157,16 @@ Legal Task Environment
 State Representation (Document Embeddings)
       ↓
 ┌─────────────────────────┐
-│  RL Agent               │
+│  Training Pipeline      │
 │                         │
-│  Policy Network         │
+│  Model Components        │
 │  ├─ Feature Extractor   │
-│  ├─ Actor (Policy)      │
-│  └─ Critic (Value)      │
+│  ├─ Fine-tuning Layer   │
+│  └─ Output Layer        │
 │                         │
-│  Training Algorithm     │
-│  ├─ PPO (On-policy)     │
-│  └─ DQN (Off-policy)    │
+│  Training Methods       │
+│  ├─ SFT (Supervised)    │
+│  └─ Feedback-based      │
 └─────────────────────────┘
       ↓
 Action (Token/Class/Span)
@@ -176,9 +174,9 @@ Action (Token/Class/Span)
 Environment Step
       ↓
 ┌─────────────────────────┐
-│  Reward Calculator      │
+│  Performance Metrics    │
 │                         │
-│  Component Rewards      │
+│  Evaluation Metrics     │
 │  ├─ Accuracy            │
 │  ├─ Relevance           │
 │  ├─ Coherence           │
@@ -186,17 +184,15 @@ Environment Step
 │  └─ Legal Compliance    │
 └─────────────────────────┘
       ↓
-Total Reward (Weighted Sum)
-      ↓
-Policy Update
+Model Update
 ```
 
 **Key Features**:
 - **Task Environments**: Summarization, QA, Classification
-- **Custom Rewards**: Legal-specific reward functions
-- **Multiple Algorithms**: PPO and DQN support
+- **Custom Metrics**: Legal-specific evaluation functions
+- **Multiple Methods**: SFT and feedback-based training
 - **Curriculum Learning**: Progressive difficulty
-- **Shaped Rewards**: Smooth learning curves
+- **Performance Tracking**: Continuous monitoring
 
 **Training Process**:
 1. Initialize environment with base model
@@ -241,10 +237,10 @@ User Input (Text/Query)
 Tokenization
       ↓
 Model Inference
-  ├─ Mamba: Long document classification
+  ├─ Transformer: Long document classification
   ├─ Transfer: Entity extraction / QA
   ├─ RAG: Document retrieval + generation
-  └─ RL-optimized: Enhanced outputs
+  └─ Training-optimized: Enhanced outputs
       ↓
 Post-processing
       ↓
@@ -256,14 +252,14 @@ Output (Prediction/Answer)
 ### Pattern 1: Sequential Pipeline
 
 ```
-Document → Mamba (Classify) → Transfer (NER) → Output
+Document → Transformer (Classify) → Transfer (NER) → Output
 ```
 Use when tasks are dependent on each other.
 
 ### Pattern 2: Parallel Processing
 
 ```
-           ┌─→ Mamba (Classify)
+           ┌─→ Transformer (Classify)
 Document ──┼─→ Transfer (NER)
            └─→ RAG (Q&A)
 ```
@@ -272,21 +268,21 @@ Use for independent tasks on same document.
 ### Pattern 3: Hierarchical Processing
 
 ```
-Document → Mamba (Chunks) → RAG (Retrieve) → Transfer (Extract) → Output
+Document → Transformer (Chunks) → RAG (Retrieve) → Transfer (Extract) → Output
 ```
 Use for complex multi-stage analysis.
 
-### Pattern 4: RL-Enhanced Pipeline
+### Pattern 4: Training-Enhanced Pipeline
 
 ```
-Document → Base Model → RL Agent (Optimize) → Enhanced Output
+Document → Base Model → Training Pipeline (Optimize) → Enhanced Output
 ```
 Use when output quality needs optimization.
 
 ## Performance Characteristics
 
-### Mamba Architecture
-- **Latency**: Medium (hierarchical attention overhead)
+### Transformer Architecture
+- **Latency**: Medium (attention overhead)
 - **Throughput**: High (batch processing)
 - **Memory**: Efficient (chunked processing)
 - **Max Length**: 100K+ tokens

@@ -1,8 +1,8 @@
 model_routing:
-  enable_mamba: true
-  mamba_threshold_tokens: 4096
-  mamba_min_pages: 3
-  mamba_keywords:
+  enable_transformer: true
+  transformer_threshold_tokens: 4096
+  transformer_min_pages: 3
+  transformer_keywords:
     - judgment
     - order
     - case

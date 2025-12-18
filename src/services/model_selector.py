@@ -22,7 +22,7 @@ class AutoModelSelector:
     Clean auto-selector with explicit rules:
     - Query length < 10 words → TLH (fast)
     - Legal keywords (Act, section, law, punishment) → RL model
-    - Multiple document aggregation → Mamba
+    - Multiple document aggregation → Transformer-based model
     """
     
     LEGAL_KEYWORDS = [
@@ -45,7 +45,7 @@ class AutoModelSelector:
         Rules:
         1. Short queries (< 10 words) → TLH (fast lookup)
         2. Legal queries → RL model (trained on legal text)
-        3. Aggregation queries → Mamba (hierarchical attention)
+        3. Aggregation queries → Transformer-based model
         4. Default → RL model
         """
         query_lower = query.lower().strip()
@@ -67,19 +67,19 @@ class AutoModelSelector:
                 confidence=0.92
             )
         
-        # Rule 3: Aggregation queries → Mamba
+        # Rule 3: Aggregation queries → Transformer-based model
         if self._requires_aggregation(query_lower):
             return ModelSelection(
-                selected_model="mamba",
-                reason="Multi-document aggregation required - using Mamba hierarchical attention",
+                selected_model="transformer",
+                reason="Multi-document aggregation required - using Transformer-based model",
                 confidence=0.88
             )
         
-        # Rule 4: Complex queries with many docs → Mamba
+        # Rule 4: Complex queries with many docs → Transformer-based model
         if retrieved_docs > 5:
             return ModelSelection(
-                selected_model="mamba",
-                reason="Multiple documents retrieved - using Mamba for synthesis",
+                selected_model="transformer",
+                reason="Multiple documents retrieved - using Transformer-based model for synthesis",
                 confidence=0.85
             )
         

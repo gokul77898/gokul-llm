@@ -428,7 +428,7 @@ def test_feature_summary():
         "✅ Quantization Pipeline (INT4/INT8/FP8)",
         "✅ Low-latency Token Streaming (SSE + WS)",
         "✅ Mac/CPU Fallback Support",
-        "✅ Integration with Mamba/Transformer Auto-detection",
+        "✅ Integration with Transformer Auto-detection",
         "✅ Comprehensive Test Coverage"
     ]
     
