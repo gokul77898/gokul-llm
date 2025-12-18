@@ -1,7 +1,7 @@
 # Transfer Learning Configuration for Legal Data
 
 model:
-  base_model: "bert-base-uncased"  # or "gpt2", "roberta-base", etc.
+  base_model: "law-ai/Indian-Legal-Assistant-8B"  # Phase 3.6: Authorized encoder
   task: "classification"  # "classification", "ner", "summarization", "generation", "qa"
   num_labels: 3
   max_length: 512

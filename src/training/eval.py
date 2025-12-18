@@ -4,7 +4,7 @@ Model Evaluation Script
 Evaluate fine-tuned models on held-out test set with multiple metrics.
 
 Usage:
-    python -m src.training.eval --model mamba_lora --dataset data/val_sft.jsonl
+    python -m src.training.eval --model encoder --dataset data/val_sft.jsonl
 """
 
 import argparse

@@ -1,0 +1,67 @@
+# Phase 3.5: Decoder SFT Configuration
+# Supervised Fine-Tuning for Instruction Following
+# DO NOT EXECUTE TRAINING - Infrastructure setup only
+# Phase 3.6: Unified to Qwen 2.5-32B-Instruct
+
+model:
+  base_model: "Qwen/Qwen2.5-32B-Instruct"
+  task_type: "causal_lm"
+  use_peft: true
+  peft_config:
+    r: 16
+    lora_alpha: 32
+    lora_dropout: 0.05
+    target_modules:
+      - "q_proj"
+      - "v_proj"
+      - "k_proj"
+      - "o_proj"
+
+training:
+  output_dir: "./outputs/decoder_sft"
+  num_train_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+  learning_rate: 2e-4
+  weight_decay: 0.01
+  warmup_ratio: 0.03
+  logging_steps: 50
+  eval_strategy: "steps"
+  eval_steps: 200
+  save_strategy: "steps"
+  save_steps: 200
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  fp16: true
+  gradient_checkpointing: true
+
+data:
+  train_file: "src/training/datasets/decoder/train.jsonl"
+  eval_file: "src/training/datasets/decoder/eval.jsonl"
+  max_seq_length: 2048
+  prompt_template: |
+    You are a legal assistant. Use ONLY the provided facts to answer.
+    If facts are insufficient, respond with "REFUSE: Missing facts."
+    
+    ENCODER_FACTS:
+    {encoder_facts}
+    
+    QUESTION:
+    {question}
+    
+    ANSWER:
+
+refusal:
+  enabled: true
+  refusal_token: "REFUSE:"
+  refusal_samples_ratio: 0.2  # 20% of training data should be refusal examples
+
+evaluation:
+  metrics:
+    - "fact_adherence"
+    - "refusal_correctness"
+    - "perplexity"
+  fact_adherence_threshold: 0.8

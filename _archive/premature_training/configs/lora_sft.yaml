@@ -11,7 +11,7 @@ lora:
   r: 8  # LoRA rank
   lora_alpha: 16  # LoRA alpha
   lora_dropout: 0.05
-  target_modules:  # Modules to apply LoRA (GPT-2 uses c_attn for Q/K/V)
+  target_modules:  # Modules to apply LoRA
     - "c_attn"
     - "c_proj"
   bias: "none"

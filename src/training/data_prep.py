@@ -274,8 +274,8 @@ def main():
         print("="*70)
         print(f"✅ Training data: {out_dir / 'train_sft.jsonl'}")
         print(f"✅ Validation data: {out_dir / 'val_sft.jsonl'}")
-        print("\n💡 Next step: Run LoRA trainer")
-        print("   python -m src.training.lora_trainer --config configs/lora_sft.yaml --dry-run")
+        print("\n💡 Next step: Training infrastructure ready (Phase 3.5)")
+        print("   Training is DISABLED - see src/training/README.md")
         
     except Exception as e:
         print(f"\n❌ Error: {e}")

@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 class TrainingOrchestrator:
     """Orchestrates training across all MARK components"""
     
-    VALID_TARGETS = ['mamba', 'transformer', 'rag', 'rl', 'full-pipeline']
+    # Phase 3.7: RL training disabled - archived to _archive/premature_training/
+    VALID_TARGETS = ['mamba', 'transformer', 'rag', 'full-pipeline']
     
     def __init__(self, log_dir: str = "logs/orchestrator"):
         self.log_dir = Path(log_dir)
@@ -97,11 +98,11 @@ class TrainingOrchestrator:
     ) -> Dict[str, Any]:
         """Train a single component"""
         # Map target to script and default config
+        # Phase 3.7: RL removed - archived to _archive/premature_training/
         script_map = {
             'mamba': ('src.scripts.train_mamba', 'configs/mamba_train.yaml'),
             'transformer': ('src.scripts.train_transfer', 'configs/transfer_train.yaml'),
             'rag': ('src.scripts.train_rag_indexer', 'configs/rag_indexer.yaml'),
-            'rl': ('src.scripts.train_rl', 'configs/rl_train.yaml'),
         }
         
         script_module, default_config = script_map[target]
@@ -142,7 +143,8 @@ class TrainingOrchestrator:
         self.logger.info("Starting full pipeline training")
         
         results = {}
-        pipeline_order = ['mamba', 'transformer', 'rag', 'rl']
+        # Phase 3.7: RL removed from pipeline - archived to _archive/premature_training/
+        pipeline_order = ['mamba', 'transformer', 'rag']
         
         for target in pipeline_order:
             self.logger.info(f"Pipeline step: {target}")

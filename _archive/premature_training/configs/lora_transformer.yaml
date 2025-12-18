@@ -23,7 +23,7 @@ lora:
 
 model:
   name: "transformer"
-  base_model: "gpt2"
+  base_model: "Qwen/Qwen2.5-32B-Instruct"  # Phase 3.6: Authorized decoder
 
 data:
   train_file: "data/legal_qa_train.jsonl"

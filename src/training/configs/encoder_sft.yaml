@@ -1,0 +1,52 @@
+# Phase 3.5: Encoder SFT Configuration
+# Token Classification (NER) Training Config
+# DO NOT EXECUTE TRAINING - Infrastructure setup only
+# Phase 3.6: Unified to Indian Legal Assistant 8B
+
+model:
+  base_model: "law-ai/Indian-Legal-Assistant-8B"
+  task_type: "token_classification"
+  num_labels: 9  # O, B-SECTION, I-SECTION, B-ACT, I-ACT, B-PARTY, I-PARTY, B-DATE, I-DATE
+
+training:
+  output_dir: "./outputs/encoder_sft"
+  num_train_epochs: 3
+  per_device_train_batch_size: 16
+  per_device_eval_batch_size: 32
+  learning_rate: 2e-5
+  weight_decay: 0.01
+  warmup_ratio: 0.1
+  logging_steps: 100
+  eval_strategy: "steps"
+  eval_steps: 500
+  save_strategy: "steps"
+  save_steps: 500
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "f1"
+  greater_is_better: true
+
+data:
+  train_file: "src/training/datasets/encoder/train.jsonl"
+  eval_file: "src/training/datasets/encoder/eval.jsonl"
+  max_seq_length: 512
+  label_all_tokens: false
+
+labels:
+  - "O"
+  - "B-SECTION"
+  - "I-SECTION"
+  - "B-ACT"
+  - "I-ACT"
+  - "B-PARTY"
+  - "I-PARTY"
+  - "B-DATE"
+  - "I-DATE"
+
+evaluation:
+  metrics:
+    - "precision"
+    - "recall"
+    - "f1"
+    - "false_positive_rate"
+  compute_entity_level: true

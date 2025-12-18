@@ -4,7 +4,7 @@
 model:
   name: "transformer"
   backend: "transformer"
-  model_name: "gpt2"  # Using GPT-2 as base transformer
+  model_name: "Qwen/Qwen2.5-32B-Instruct"  # Phase 3.6: Authorized decoder
   device: "mps"  # Mac Metal Performance Shaders
   precision: "fp16"
   max_seq_len: 1024
@@ -39,7 +39,7 @@ generation:
   top_p: 0.9
   top_k: 50
   do_sample: true
-  pad_token_id: 50256  # GPT-2 EOS token
+  pad_token_id: null  # Auto-detect from tokenizer
 
 # Device and Performance
 device:

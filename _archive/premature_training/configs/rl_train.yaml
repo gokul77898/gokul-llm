@@ -1,7 +1,7 @@
 # RL Training Configuration
 model:
   policy_model: "ppo"  # ppo, dqn
-  base_model: "gpt2"
+  base_model: "Qwen/Qwen2.5-32B-Instruct"  # Phase 3.6: Authorized decoder
   hidden_dim: 256
   n_layers: 2
   action_space: 10

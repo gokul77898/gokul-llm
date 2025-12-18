@@ -1,17 +1,25 @@
+# PRODUCTION CONFIG - MoE Legal AI System
+# Encoder: Indian Legal Assistant 8B
+# Decoder: Qwen 2.5-32B-Instruct
+# ============================================================
+# Requires HF_TOKEN environment variable
+# Phase 3.6: Unified model configuration
+
 experts:
-  - name: inlegalbert
-    model_id: "law-ai/InLegalBERT"
-    task_types: ["ner", "classification"]
-    priority_score: 1.0
+  - name: indian-legal-encoder
+    role: encoder
+    model_id: "ai4bharat/indian-legal-bert-8b"
+    backend: local
+    task_types: ["ner", "encoder"]
+    device: cuda
+    dtype: bfloat16
+    max_tokens: 512
 
-  - name: incaselawbert
-    model_id: "law-ai/InCaseLawBERT"
-    task_types: ["case-classification", "legal-reasoning", "similarity"]
-    priority_score: 0.96
-
-  - name: gemma-legal
-    model_id: "google/gemma-2b-it"
-    task_types: ["qa", "summarization", "generation", "reasoning"]
-    priority_score: 0.88
-    token_window: 8192
-
+  - name: qwen-32b-decoder
+    role: decoder
+    model_id: "Qwen/Qwen2.5-32B-Instruct"
+    backend: local
+    task_types: ["qa", "generation", "decoder"]
+    device: cuda
+    dtype: bfloat16
+    max_tokens: 4096

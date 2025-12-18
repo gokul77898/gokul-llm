@@ -1,17 +1,16 @@
 """
-Pure MoE Router for MARK System.
-Routes queries to the best available Hugging Face expert model.
+Phase 0: Pure MoE Router for MARK System.
+Routes queries to the best available expert model.
+Deterministic routing - no model loading.
 """
 
 import argparse
 import json
 import logging
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-import torch
 import yaml
 
 from src.core.model_registry import get_registry, ExpertInfo
@@ -63,7 +62,7 @@ class MoERouter:
         self.cache[cache_key] = result
         return result
         
-    def route(self, text: str, task_hint: str = None, top_k: int = 1) -> List[Dict[str, Any]]:
+    def route(self, text: str, task_hint: str = None, top_k: int = 1, role: str = None) -> List[Dict[str, Any]]:
         """
         Route the input text to the best experts.
         
@@ -71,11 +70,16 @@ class MoERouter:
             text: Input query or document text
             task_hint: Optional task type (e.g., 'qa', 'ner')
             top_k: Number of experts to return
+            role: Optional role filter ('encoder' or 'decoder')
             
         Returns:
             List of dicts with expert info and score
         """
         experts = self.registry.list_experts()
+        
+        # Filter by role if specified
+        if role:
+            experts = [e for e in experts if e.role == role]
         scores = []
         
         doc_len = len(text.split())

@@ -6,7 +6,7 @@ enabled: false
 
 # Reward model configuration
 reward_model:
-  base_model: "gpt2"  # Base model for reward modeling
+  base_model: "Qwen/Qwen2.5-32B-Instruct"  # Phase 3.6: Authorized decoder
   checkpoint: null
   hidden_size: 768
   num_labels: 1  # Scalar reward
