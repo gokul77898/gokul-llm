@@ -131,6 +131,60 @@ See `docs/` for detailed documentation on:
 - Training guides
 - Best practices
 
+## 🖥️ GPU Activation (Deferred)
+
+The system is designed to run without GPU today and with GPU tomorrow. No code changes required.
+
+### Current State (CPU Mode)
+- RAG retrieval, validation, and context assembly work
+- Encoder/decoder fail gracefully with `encoder_failed` / `decoder_failed`
+- Zero safety regression
+
+### GPU Activation Steps
+
+When GPU is available, load models manually:
+
+```python
+from src.inference.server import MODEL_REGISTRY
+
+# Load encoder (~16GB VRAM)
+MODEL_REGISTRY.load_encoder(
+    "ai4bharat/indian-legal-bert-8b",
+    device="cuda",
+    dtype="bfloat16"
+)
+
+# Load decoder (~64GB VRAM for 32B model)
+MODEL_REGISTRY.load_decoder(
+    "Qwen/Qwen2.5-32B-Instruct",
+    device="cuda",
+    dtype="bfloat16"
+)
+```
+
+### Expected VRAM Requirements
+
+| Model | Size | VRAM (bfloat16) |
+|-------|------|-----------------|
+| indian-legal-bert-8b | 8B | ~16GB |
+| Qwen2.5-32B-Instruct | 32B | ~64GB |
+
+### Verification
+
+```bash
+# Check GPU readiness
+python scripts/gpu_readiness_check.py
+
+# Run full system verification
+python scripts/full_system_verification.py
+```
+
+### After GPU Activation
+- Full MoE + RAG + decoder works
+- Same refusal behavior
+- Same auditability
+- Same safety guarantees
+
 ## 🤝 Contributing
 
 This is a research and development project. For questions or issues, please refer to the project documentation.
