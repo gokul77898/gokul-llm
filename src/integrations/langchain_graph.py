@@ -16,7 +16,7 @@ except ImportError:
     LANGCHAIN_AVAILABLE = False
     logging.warning("LangChain not available. Install with: pip install langchain")
 
-from src.core import load_model
+from src.inference.model_loader import ModelLoader
 from src.rag.document_store import Document
 
 logger = logging.getLogger(__name__)
@@ -27,8 +27,13 @@ class MARKLLMWrapper:
     
     def __init__(self, model_name: str = "mamba", device: Optional[str] = None):
         self.model_name = model_name
-        self.model, self.tokenizer, self.device = load_model(model_name, device)
-        logger.info(f"Initialized MARK LLM wrapper with {model_name}")
+        self.device = device or "cpu"
+        self._loader = ModelLoader(device=self.device)
+        # Models are loaded explicitly via LocalModelRegistry
+        # This wrapper provides interface compatibility
+        self.model = None
+        self.tokenizer = None
+        logger.info(f"Initialized MARK LLM wrapper with {model_name} (local-only)")
     
     def __call__(self, prompt: str, stop: Optional[List[str]] = None, **kwargs) -> str:
         """Generate response for a prompt"""
@@ -78,9 +83,13 @@ class MARKRetrieverWrapper:
     """Wrapper to use MARK RAG as LangChain retriever"""
     
     def __init__(self, device: Optional[str] = None, top_k: int = 5):
-        self.retriever, self.embedding_model, self.device = load_model("rag_encoder", device)
+        self.device = device or "cpu"
+        self._loader = ModelLoader(device=self.device)
+        # Retriever is initialized separately via ChromaDB
+        self.retriever = None
+        self.embedding_model = None
         self.top_k = top_k
-        logger.info("Initialized MARK retriever wrapper")
+        logger.info("Initialized MARK retriever wrapper (local-only)")
     
     def get_relevant_documents(self, query: str) -> List[LangChainDocument]:
         """Retrieve relevant documents"""

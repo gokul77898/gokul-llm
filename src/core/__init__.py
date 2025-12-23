@@ -1,5 +1,5 @@
-"""Core system components - Phase 0: HF Inference API Only"""
+"""Core system components - Local-Only Inference"""
 
-from .model_registry import ModelRegistry, get_registry, ExpertInfo, get_hf_client, HFInferenceClient
+from .model_registry import ModelRegistry, get_registry, ExpertInfo
 
-__all__ = ['ModelRegistry', 'get_registry', 'ExpertInfo', 'get_hf_client', 'HFInferenceClient']
+__all__ = ['ModelRegistry', 'get_registry', 'ExpertInfo']

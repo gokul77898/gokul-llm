@@ -13,7 +13,8 @@ except ImportError:
     FASTAPI_AVAILABLE = False
     logging.warning("FastAPI not available. Install with: pip install fastapi uvicorn")
 
-from src.core import load_model, get_registry
+from src.core import get_registry
+from src.inference.model_loader import ModelLoader
 from src.pipelines.fusion_pipeline import FusionPipeline
 from src.pipelines.auto_pipeline import AutoPipeline
 from src.feedback.worker import FeedbackWorker
@@ -156,7 +157,6 @@ def get_fusion_pipeline(model: str = "mamba") -> FusionPipeline:
         if state.retriever is not None:
             # Create pipeline with custom retriever
             try:
-                generator, tokenizer, device = load_model(model)
                 state.fusion_pipeline = FusionPipeline(
                     generator_model=model,
                     retriever_model="rag_encoder",
@@ -434,9 +434,9 @@ if FASTAPI_AVAILABLE:
         try:
             logger.info(f"RAG search: {request.query[:100]}...")
             
-            # Load retriever if not loaded
+            # Ensure ChromaDB retriever is initialized
             if state.retriever is None:
-                state.retriever, _, _ = load_model("rag_encoder", device="cpu")
+                initialize_chromadb()
             
             # Search
             results = state.retriever.search(request.query, top_k=request.top_k)
@@ -472,10 +472,14 @@ if FASTAPI_AVAILABLE:
         try:
             logger.info(f"Generate request with {request.model}")
             
-            # Load model if not cached
+            # Load model if not cached - use local model loader
             if request.model not in state.models_cache:
-                model, tokenizer, device = load_model(request.model, device="cpu")
-                state.models_cache[request.model] = (model, tokenizer, device)
+                loader = ModelLoader(device="cpu")
+                # For local inference, models must be explicitly loaded
+                raise HTTPException(
+                    status_code=501, 
+                    detail=f"Direct model generation not supported. Use /query endpoint with RAG pipeline."
+                )
             else:
                 model, tokenizer, device = state.models_cache[request.model]
             

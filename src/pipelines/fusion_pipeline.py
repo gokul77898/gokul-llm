@@ -5,7 +5,7 @@ import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from src.core import load_model
+from src.inference.model_loader import ModelLoader
 
 logger = logging.getLogger(__name__)
 
@@ -65,11 +65,18 @@ class FusionPipeline:
         
         logger.info(f"Initializing FusionPipeline with generator={generator_model}, retriever={retriever_model}")
         
-        # Load models
-        self.generator, self.tokenizer, self.device = load_model(generator_model, device)
-        self.retriever, self.embedding_model, _ = load_model(retriever_model, device)
+        # Initialize local model loader
+        self._loader = ModelLoader(device=device or "cpu")
+        self.device = device or "cpu"
         
-        logger.info("FusionPipeline initialized successfully")
+        # Models are loaded explicitly via LocalModelRegistry when GPU is available
+        # For CPU/RAG-only mode, these remain None until explicitly loaded
+        self.generator = None
+        self.tokenizer = None
+        self.retriever = None
+        self.embedding_model = None
+        
+        logger.info("FusionPipeline initialized (local-only, models loaded on demand)")
     
     def retrieve(self, query: str, top_k: Optional[int] = None) -> List[RetrievedDocument]:
         """

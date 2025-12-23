@@ -1,0 +1,54 @@
+# Phase-1 RAG Operational Baseline Configuration
+# All hardcoded values centralized here for reproducibility
+
+version: "1.0.0"
+phase: "phase-1"
+
+# Directory Contract (strict paths)
+paths:
+  raw_dir: "data/rag/raw"
+  documents_dir: "data/rag/documents"
+  chunks_dir: "data/rag/chunks"
+  chromadb_dir: "data/rag/chromadb"
+
+# Encoder Model (embedding)
+encoder:
+  model_name: "BAAI/bge-large-en-v1.5"
+  embedding_dim: 1024
+  normalize_embeddings: true
+  device: "cpu"
+
+# Decoder Model (generation) - Phase-4 Local Decoder Abstraction
+decoder:
+  type: "qwen"  # Options: qwen, llama, stub
+  model_name: "Qwen/Qwen2.5-32B-Instruct"
+  device: "cpu"  # Options: cpu, cuda, mps
+  dtype: "float32"  # Options: float32, float16, bfloat16
+  enable_inference: false  # SAFE MODE: false = stub, true = actual inference
+  max_context_length: 2048
+  max_generation_length: 512
+  temperature: 0.0  # Deterministic generation
+  top_p: 0.9
+  top_k: 50
+
+# Chunking Configuration
+chunking:
+  min_chunk_length: 20
+  preserve_legal_structure: true
+
+# Retrieval Configuration
+retrieval:
+  top_k: 5
+  collection_name: "legal_chunks"
+  similarity_metric: "cosine"
+
+# Indexing Configuration
+indexing:
+  batch_size: 32
+  use_gpu: false
+
+# System Configuration
+system:
+  seed: 42
+  num_workers: 4
+  log_level: "INFO"
