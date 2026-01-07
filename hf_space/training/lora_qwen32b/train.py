@@ -24,12 +24,18 @@ Requirements:
     - datasets
 """
 
+import sys
+import os
+import time
+
+print("🚀 train.py started", flush=True)
+print("Python:", sys.version, flush=True)
+print("PID:", os.getpid(), flush=True)
+time.sleep(1)
+
 import argparse
 import json
 import math
-import os
-import sys
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -267,6 +273,7 @@ class ProductionTrainer:
         log("✓ Tokenizer loaded")
         
         # Load model with BF16 - HF Training Job requirements
+        print("📦 Loading base model...", flush=True)
         self.base_model = AutoModelForCausalLM.from_pretrained(
             MODEL_CONFIG["base_model"],
             trust_remote_code=MODEL_CONFIG["trust_remote_code"],
@@ -282,6 +289,7 @@ class ProductionTrainer:
         
         # Apply LoRA
         self.model = get_peft_model(self.base_model, LORA_CONFIG)
+        print("🧠 LoRA applied", flush=True)
         
         # Validate trainable parameters
         self._validate_trainable_params()
@@ -332,6 +340,7 @@ class ProductionTrainer:
             
             # Load dataset from Hub - MUST use exact dataset name
             raw_dataset = load_dataset("OmilosAISolutions/nyayamitra-training-data", split="train")
+            print("📊 Dataset loaded", flush=True)
             
             # Map to expected format {"text": ...}
             def format_dataset(example):
