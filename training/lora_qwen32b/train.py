@@ -266,12 +266,12 @@ class ProductionTrainer:
         
         log("✓ Tokenizer loaded")
         
-        # Load model with BF16
+        # Load model with BF16 - HF Training Job requirements
         self.base_model = AutoModelForCausalLM.from_pretrained(
             MODEL_CONFIG["base_model"],
             trust_remote_code=MODEL_CONFIG["trust_remote_code"],
             torch_dtype=torch.bfloat16,
-            device_map=None,  # DeepSpeed handles distribution
+            device_map="auto",  # HF Training Jobs: auto-distribution
         )
         
         log("✓ Base model loaded")
@@ -330,8 +330,8 @@ class ProductionTrainer:
         if train_path and train_path.startswith("OmilosAISolutions/"):
             log(f"Loading dataset from Hugging Face Hub: {train_path}")
             
-            # Load dataset from Hub
-            raw_dataset = load_dataset(train_path, split="train")
+            # Load dataset from Hub - MUST use exact dataset name
+            raw_dataset = load_dataset("OmilosAISolutions/nyayamitra-training-data", split="train")
             
             # Map to expected format {"text": ...}
             def format_dataset(example):

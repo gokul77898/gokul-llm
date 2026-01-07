@@ -17,19 +17,20 @@ WARNING: 2× RTX 4090 is UNSTABLE for 32B model.
 from peft import LoraConfig, TaskType
 
 # =============================================================================
-# LoRA Configuration (Memory Safe for 24GB GPUs)
+# LoRA Configuration (Decoder-only for HF Training Jobs)
 # =============================================================================
-# WHY r=8: Higher ranks (16, 32) increase VRAM usage significantly.
-#          r=8 with alpha=16 provides good adaptation with ~0.07% trainable params.
-# WHY only q_proj, v_proj: Adding more modules increases memory and instability.
-#          These two capture most of the adaptation benefit.
+# HF Training Job Requirements:
+# - r=8: Low rank for memory efficiency on H100
+# - lora_alpha=16: Standard scaling (alpha/r = 2)
+# - target_modules: Decoder attention modules only
+# - task_type=CAUSAL_LM: Decoder-only training
 LORA_CONFIG = LoraConfig(
     r=8,                              # Low rank for memory efficiency
     lora_alpha=16,                    # alpha/r = 2 is standard scaling
     lora_dropout=0.05,                # Light dropout for regularization
     bias="none",                      # No bias training - saves memory
-    task_type=TaskType.CAUSAL_LM,
-    target_modules=["q_proj", "v_proj"],  # ONLY these - do NOT add more
+    task_type=TaskType.CAUSAL_LM,    # Decoder-only causal LM
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],  # Decoder attention only
 )
 
 # =============================================================================
