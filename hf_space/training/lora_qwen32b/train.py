@@ -28,10 +28,26 @@ import sys
 import os
 import time
 
-print("🚀 train.py started", flush=True)
-print("Python:", sys.version, flush=True)
-print("PID:", os.getpid(), flush=True)
-time.sleep(1)
+LOG_PATH = "train.log"
+log_file = open(LOG_PATH, "w", buffering=1)
+
+def log(*args):
+    msg = " ".join(str(a) for a in args)
+    print(msg, flush=True)
+    print(msg, file=log_file, flush=True)
+
+log("🚀 train.py started")
+log("Python:", sys.version)
+log("PID:", os.getpid())
+
+import threading
+
+def heartbeat():
+    while True:
+        log("⏳ still alive")
+        time.sleep(60)
+
+threading.Thread(target=heartbeat, daemon=True).start()
 
 import argparse
 import json
@@ -62,10 +78,10 @@ from lora_config import (
 )
 
 
-def log(msg: str) -> None:
+def log_msg(msg: str) -> None:
     """Timestamped logging."""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {msg}", flush=True)
+    log(f"[{ts}] {msg}")
 
 
 def validate_hardware() -> int:
@@ -273,7 +289,7 @@ class ProductionTrainer:
         log("✓ Tokenizer loaded")
         
         # Load model with BF16 - HF Training Job requirements
-        print("📦 Loading base model...", flush=True)
+        log("📦 Loading base model...")
         self.base_model = AutoModelForCausalLM.from_pretrained(
             MODEL_CONFIG["base_model"],
             trust_remote_code=MODEL_CONFIG["trust_remote_code"],
@@ -289,7 +305,7 @@ class ProductionTrainer:
         
         # Apply LoRA
         self.model = get_peft_model(self.base_model, LORA_CONFIG)
-        print("🧠 LoRA applied", flush=True)
+        log("🧠 LoRA applied")
         
         # Validate trainable parameters
         self._validate_trainable_params()
@@ -340,7 +356,7 @@ class ProductionTrainer:
             
             # Load dataset from Hub - MUST use exact dataset name
             raw_dataset = load_dataset("OmilosAISolutions/nyayamitra-training-data", split="train")
-            print("📊 Dataset loaded", flush=True)
+            log("📊 Dataset loaded")
             
             # Map to expected format {"text": ...}
             def format_dataset(example):
@@ -616,6 +632,19 @@ def main():
     except Exception as e:
         log(f"✗ TRAINING FAILED: {e}")
         raise
+    finally:
+        log("✅ Training finished")
+        from huggingface_hub import upload_file
+        
+        upload_file(
+            path_or_fileobj="train.log",
+            path_in_repo="logs/train.log",
+            repo_id="OmilosAISolutions/LLM",
+            repo_type="space",
+        )
+        
+        log("📤 train.log uploaded to Hugging Face Hub")
+        log_file.close()
 
 
 if __name__ == "__main__":
