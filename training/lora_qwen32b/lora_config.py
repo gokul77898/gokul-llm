@@ -8,8 +8,8 @@ from peft import LoraConfig, TaskType
 
 # LoRA Configuration (Production)
 LORA_CONFIG = LoraConfig(
-    r=16,
-    lora_alpha=32,
+    r=8,
+    lora_alpha=16,
     lora_dropout=0.05,
     bias="none",
     task_type=TaskType.CAUSAL_LM,
@@ -27,7 +27,7 @@ MODEL_CONFIG = {
 # Training Configuration
 TRAINING_CONFIG = {
     "micro_batch_size": 1,
-    "gradient_accumulation_steps": 16,
+    "gradient_accumulation_steps": 32,
     "learning_rate": 1e-4,
     "weight_decay": 0.01,
     "warmup_steps": 1000,
@@ -41,9 +41,9 @@ TRAINING_CONFIG = {
 
 # Hardware Requirements
 HARDWARE_REQUIREMENTS = {
-    "min_gpus": 4,
-    "min_vram_per_gpu_gb": 80,
-    "supported_gpus": ["A100", "H100"],
+    "min_gpus": 2,
+    "min_vram_per_gpu_gb": 24,
+    "supported_gpus": ["A100", "H100", "RTX 4090", "RTX 3090"],
     "cuda_required": True,
     "bf16_required": True,
 }
