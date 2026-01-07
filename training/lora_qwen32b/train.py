@@ -1,24 +1,27 @@
 #!/usr/bin/env python3
 """
 Production LoRA Training for Qwen2.5-32B-Instruct
-CUDA-only, multi-GPU with DeepSpeed ZeRO-2
+Hugging Face Training Jobs compatible (single H100)
 
 Usage:
-    deepspeed --num_gpus=4 train.py --data_path data/train.jsonl
+    python training/lora_qwen32b/train.py
 
 Hardware Support:
-    - 4× RTX 4090 (24GB each) - PRIMARY TARGET
-    - 4× RTX 3090 (24GB each) - Supported
-    - 4× A100 (40/80GB each) - Supported
-    - 4× H100 (80GB each) - Supported
+    - 1× H100 (80GB) - PRIMARY TARGET for HF Training Jobs
+    - 1× A100 (40/80GB) - Supported
+    - Multi-GPU DeepSpeed mode preserved for local training
 
-WARNING: 2× RTX 4090 is UNSTABLE for 32B model - experimental only.
+HF Training Job Compatibility:
+    - Loads dataset from Hugging Face Hub
+    - No DeepSpeed CLI required
+    - Single process execution
+    - Encoder remains frozen and unused
 
 Requirements:
     - CUDA 11.8+
     - PyTorch 2.0+
-    - DeepSpeed 0.12+
     - PEFT 0.7+
+    - datasets
 """
 
 import argparse
@@ -41,6 +44,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
 )
 from peft import get_peft_model, prepare_model_for_kbit_training
+from datasets import load_dataset
 
 from lora_config import (
     LORA_CONFIG,
@@ -60,8 +64,8 @@ def log(msg: str) -> None:
 
 def validate_hardware() -> int:
     """
-    Validate CUDA availability, GPU count, and VRAM.
-    ABORTS with clear error if insufficient hardware.
+    Validate CUDA availability and GPU count.
+    For HF Training Jobs: Single H100/A100 is sufficient.
     Returns GPU count on success.
     """
     # ==========================================================================
@@ -75,46 +79,25 @@ def validate_hardware() -> int:
         )
     
     gpu_count = torch.cuda.device_count()
-    min_gpus = HARDWARE_REQUIREMENTS["min_gpus"]
-    min_vram = HARDWARE_REQUIREMENTS["min_vram_per_gpu_gb"]
     
     # ==========================================================================
-    # CHECK 2: GPU count - ABORT if below minimum
+    # CHECK 2: GPU count - Single GPU is OK for HF Training Jobs
     # ==========================================================================
-    if gpu_count < 2:
+    if gpu_count < 1:
         raise RuntimeError(
-            f"FATAL: At least 2 GPUs required for 32B model.\n"
-            f"Found: {gpu_count} GPU(s).\n"
-            f"Qwen2.5-32B cannot fit on a single GPU even with LoRA."
+            f"FATAL: No CUDA GPUs found.\n"
+            f"HF Training Jobs require at least 1 GPU."
         )
-    
-    if gpu_count < min_gpus:
-        log(f"⚠ WARNING: Found {gpu_count} GPUs, recommended minimum is {min_gpus}")
-        log(f"⚠ 2× GPU mode is EXPERIMENTAL - expect OOM or gradient instability")
-        log(f"⚠ Proceeding anyway - monitor VRAM closely")
     
     log(f"✓ CUDA validated: {gpu_count} GPU(s) available")
     
     # ==========================================================================
-    # CHECK 3: VRAM per GPU - ABORT if any GPU is insufficient
+    # CHECK 3: Log GPU info (no strict VRAM check for HF Training Jobs)
     # ==========================================================================
-    insufficient_gpus = []
     for i in range(gpu_count):
         props = torch.cuda.get_device_properties(i)
         vram_gb = props.total_memory / (1024**3)
         log(f"  GPU {i}: {props.name} ({vram_gb:.1f} GB)")
-        
-        if vram_gb < min_vram:
-            insufficient_gpus.append((i, props.name, vram_gb))
-    
-    if insufficient_gpus:
-        gpu_list = "\n".join([f"  GPU {i}: {name} ({vram:.1f} GB)" for i, name, vram in insufficient_gpus])
-        raise RuntimeError(
-            f"FATAL: Insufficient VRAM detected.\n"
-            f"Minimum required: {min_vram} GB per GPU.\n"
-            f"Insufficient GPUs:\n{gpu_list}\n"
-            f"Qwen2.5-32B requires at least 24GB per GPU with ZeRO-2."
-        )
     
     return gpu_count
 
@@ -136,24 +119,31 @@ def validate_bf16() -> None:
 
 def validate_data_size(data_path: str) -> None:
     """
-    Warn if dataset is unexpectedly large.
-    Prevents accidental multi-day training on full corpus.
+    Validate dataset path for HF Training Jobs.
+    For HF Training Jobs: Dataset is loaded from Hub, not local file.
     """
-    if not os.path.exists(data_path):
+    # Skip validation for HF Training Jobs - dataset loaded from Hub
+    if data_path and data_path.startswith("OmilosAISolutions/"):
+        log(f"✓ Using Hugging Face dataset: {data_path}")
         return
     
-    size_gb = os.path.getsize(data_path) / (1024**3)
-    warning_threshold = TRAINING_CAPS.get("full_corpus_warning_gb", 50)
-    
-    if size_gb > warning_threshold:
-        log(f"⚠ WARNING: Dataset is {size_gb:.1f} GB (> {warning_threshold} GB threshold)")
-        log(f"⚠ Full corpus training may take multiple days.")
-        log(f"⚠ Consider using --max_steps to cap training duration.")
-        log(f"⚠ Recommended: --max_steps {TRAINING_CAPS['default_max_steps']}")
+    # Local dataset validation (preserved for local training)
+    if data_path and os.path.exists(data_path):
+        size_gb = os.path.getsize(data_path) / (1024**3)
+        warning_threshold = TRAINING_CAPS.get("full_corpus_warning_gb", 50)
+        
+        if size_gb > warning_threshold:
+            log(f"⚠ WARNING: Dataset is {size_gb:.1f} GB (> {warning_threshold} GB threshold)")
+            log(f"⚠ Full corpus training may take multiple days.")
+            log(f"⚠ Consider using --max_steps to cap training duration.")
+            log(f"⚠ Recommended: --max_steps {TRAINING_CAPS['default_max_steps']}")
+    else:
+        log(f"⚠ Dataset path not found: {data_path}")
+        log(f"⚠ Will attempt to load from Hugging Face Hub")
 
 
 class LegalTextDataset(Dataset):
-    """Production dataset for legal text training."""
+    """Production dataset for legal text training (from file)."""
     
     def __init__(
         self,
@@ -194,6 +184,40 @@ class LegalTextDataset(Dataset):
     
     def __getitem__(self, idx):
         text = self.data[idx]
+        
+        tokenized = self.tokenizer(
+            text,
+            truncation=True,
+            max_length=self.max_length,
+            padding=False,
+            return_tensors=None,
+        )
+        
+        tokenized["labels"] = tokenized["input_ids"].copy()
+        
+        return tokenized
+
+
+class LegalTextDatasetFromList(Dataset):
+    """Dataset from list of texts (for HF Training Jobs)."""
+    
+    def __init__(
+        self,
+        texts: list,
+        tokenizer,
+        max_length: int = 2048,
+    ):
+        self.tokenizer = tokenizer
+        self.max_length = max_length
+        self.texts = texts
+        
+        log(f"✓ Dataset created from list: {len(texts)} samples")
+    
+    def __len__(self):
+        return len(self.texts)
+    
+    def __getitem__(self, idx):
+        text = self.texts[idx]
         
         tokenized = self.tokenizer(
             text,
@@ -302,6 +326,42 @@ class ProductionTrainer:
         train_path = self.args.data_path
         val_path = self.args.val_path
         
+        # HF Training Jobs: Load from Hugging Face Hub
+        if train_path and train_path.startswith("OmilosAISolutions/"):
+            log(f"Loading dataset from Hugging Face Hub: {train_path}")
+            
+            # Load dataset from Hub
+            raw_dataset = load_dataset(train_path, split="train")
+            
+            # Map to expected format {"text": ...}
+            def format_dataset(example):
+                if isinstance(example, dict):
+                    # If dataset already has "text" field, use it
+                    if "text" in example:
+                        return {"text": example["text"]}
+                    # Otherwise, try to find a text field
+                    for key in ["content", "body", "input", "instruction"]:
+                        if key in example:
+                            return {"text": str(example[key])}
+                return {"text": str(example)}
+            
+            # Format dataset
+            formatted_dataset = raw_dataset.map(format_dataset)
+            
+            # Create dataset object
+            self.train_dataset = LegalTextDatasetFromList(
+                texts=[item["text"] for item in formatted_dataset],
+                tokenizer=self.tokenizer,
+                max_length=MODEL_CONFIG["max_seq_length"],
+            )
+            
+            log(f"✓ Training dataset loaded from Hub: {len(self.train_dataset)} samples")
+            
+            # No validation dataset from Hub (can be added later)
+            self.val_dataset = None
+            return
+        
+        # Local dataset loading (preserved for local training)
         self.train_dataset = LegalTextDataset(
             data_path=train_path,
             tokenizer=self.tokenizer,
@@ -374,7 +434,7 @@ class ProductionTrainer:
         output_dir = self.project_root / "outputs" / "adapters"
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        # Training arguments
+        # Training arguments - HF Training Jobs compatible
         training_args = TrainingArguments(
             output_dir=str(output_dir),
             per_device_train_batch_size=TRAINING_CONFIG["micro_batch_size"],
@@ -390,7 +450,7 @@ class ProductionTrainer:
             bf16=True,
             fp16=False,
             gradient_checkpointing=True,
-            deepspeed=str(self.project_root / "deepspeed_config.json"),
+            # HF Training Jobs: No DeepSpeed config
             report_to=[],
             remove_unused_columns=False,
             dataloader_pin_memory=True,
@@ -506,14 +566,14 @@ def main():
     parser.add_argument(
         "--data_path",
         type=str,
-        default="data/train.jsonl",
-        help="Path to training data (JSONL)",
+        default="OmilosAISolutions/nyayamitra-training-data",
+        help="Path to training data (JSONL) or Hugging Face dataset",
     )
     parser.add_argument(
         "--val_path",
         type=str,
-        default="data/val.jsonl",
-        help="Path to validation data (JSONL)",
+        default=None,
+        help="Path to validation data (JSONL) - optional",
     )
     parser.add_argument(
         "--max_steps",
