@@ -4,10 +4,17 @@ Production LoRA Training for Qwen2.5-32B-Instruct
 CUDA-only, multi-GPU with DeepSpeed ZeRO-2
 
 Usage:
-    deepspeed --num_gpus=8 train.py --data_path data/train.jsonl
+    deepspeed --num_gpus=4 train.py --data_path data/train.jsonl
+
+Hardware Support:
+    - 4× RTX 4090 (24GB each) - PRIMARY TARGET
+    - 4× RTX 3090 (24GB each) - Supported
+    - 4× A100 (40/80GB each) - Supported
+    - 4× H100 (80GB each) - Supported
+
+WARNING: 2× RTX 4090 is UNSTABLE for 32B model - experimental only.
 
 Requirements:
-    - 8× A100 80GB or 4× H100 80GB
     - CUDA 11.8+
     - PyTorch 2.0+
     - DeepSpeed 0.12+
@@ -35,7 +42,14 @@ from transformers import (
 )
 from peft import get_peft_model, prepare_model_for_kbit_training
 
-from lora_config import LORA_CONFIG, MODEL_CONFIG, TRAINING_CONFIG, HARDWARE_REQUIREMENTS
+from lora_config import (
+    LORA_CONFIG,
+    MODEL_CONFIG,
+    TRAINING_CONFIG,
+    HARDWARE_REQUIREMENTS,
+    TRAINING_CAPS,
+    DATA_CONFIG,
+)
 
 
 def log(msg: str) -> None:
@@ -44,37 +58,98 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
-def validate_cuda() -> None:
-    """Validate CUDA availability. FAIL HARD if not available."""
+def validate_hardware() -> int:
+    """
+    Validate CUDA availability, GPU count, and VRAM.
+    ABORTS with clear error if insufficient hardware.
+    Returns GPU count on success.
+    """
+    # ==========================================================================
+    # CHECK 1: CUDA availability - ABORT if not available
+    # ==========================================================================
     if not torch.cuda.is_available():
         raise RuntimeError(
-            "CUDA REQUIRED FOR PRODUCTION TRAINING. "
-            "This pipeline does not support CPU or MPS execution."
+            "FATAL: CUDA REQUIRED FOR PRODUCTION TRAINING.\n"
+            "This pipeline does not support CPU or MPS execution.\n"
+            "Ensure NVIDIA drivers and CUDA toolkit are installed."
         )
     
     gpu_count = torch.cuda.device_count()
-    if gpu_count < HARDWARE_REQUIREMENTS["min_gpus"]:
-        log(f"WARNING: Found {gpu_count} GPUs, recommended minimum is {HARDWARE_REQUIREMENTS['min_gpus']}")
+    min_gpus = HARDWARE_REQUIREMENTS["min_gpus"]
+    min_vram = HARDWARE_REQUIREMENTS["min_vram_per_gpu_gb"]
+    
+    # ==========================================================================
+    # CHECK 2: GPU count - ABORT if below minimum
+    # ==========================================================================
+    if gpu_count < 2:
+        raise RuntimeError(
+            f"FATAL: At least 2 GPUs required for 32B model.\n"
+            f"Found: {gpu_count} GPU(s).\n"
+            f"Qwen2.5-32B cannot fit on a single GPU even with LoRA."
+        )
+    
+    if gpu_count < min_gpus:
+        log(f"⚠ WARNING: Found {gpu_count} GPUs, recommended minimum is {min_gpus}")
+        log(f"⚠ 2× GPU mode is EXPERIMENTAL - expect OOM or gradient instability")
+        log(f"⚠ Proceeding anyway - monitor VRAM closely")
     
     log(f"✓ CUDA validated: {gpu_count} GPU(s) available")
     
+    # ==========================================================================
+    # CHECK 3: VRAM per GPU - ABORT if any GPU is insufficient
+    # ==========================================================================
+    insufficient_gpus = []
     for i in range(gpu_count):
         props = torch.cuda.get_device_properties(i)
         vram_gb = props.total_memory / (1024**3)
         log(f"  GPU {i}: {props.name} ({vram_gb:.1f} GB)")
         
-        if vram_gb < HARDWARE_REQUIREMENTS["min_vram_per_gpu_gb"]:
-            log(f"  WARNING: GPU {i} has {vram_gb:.1f} GB, recommended {HARDWARE_REQUIREMENTS['min_vram_per_gpu_gb']} GB")
+        if vram_gb < min_vram:
+            insufficient_gpus.append((i, props.name, vram_gb))
+    
+    if insufficient_gpus:
+        gpu_list = "\n".join([f"  GPU {i}: {name} ({vram:.1f} GB)" for i, name, vram in insufficient_gpus])
+        raise RuntimeError(
+            f"FATAL: Insufficient VRAM detected.\n"
+            f"Minimum required: {min_vram} GB per GPU.\n"
+            f"Insufficient GPUs:\n{gpu_list}\n"
+            f"Qwen2.5-32B requires at least 24GB per GPU with ZeRO-2."
+        )
+    
+    return gpu_count
 
 
 def validate_bf16() -> None:
-    """Validate BF16 support."""
+    """
+    Validate BF16 support.
+    ABORTS if BF16 is not supported (required for 32B stability).
+    """
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError(
-            "BF16 REQUIRED FOR PRODUCTION TRAINING. "
-            "Your GPU does not support BF16."
+            "FATAL: BF16 REQUIRED FOR PRODUCTION TRAINING.\n"
+            "Your GPU does not support BF16.\n"
+            "RTX 30xx/40xx, A100, and H100 all support BF16.\n"
+            "If using older GPUs, this pipeline is not compatible."
         )
     log("✓ BF16 validated")
+
+
+def validate_data_size(data_path: str) -> None:
+    """
+    Warn if dataset is unexpectedly large.
+    Prevents accidental multi-day training on full corpus.
+    """
+    if not os.path.exists(data_path):
+        return
+    
+    size_gb = os.path.getsize(data_path) / (1024**3)
+    warning_threshold = TRAINING_CAPS.get("full_corpus_warning_gb", 50)
+    
+    if size_gb > warning_threshold:
+        log(f"⚠ WARNING: Dataset is {size_gb:.1f} GB (> {warning_threshold} GB threshold)")
+        log(f"⚠ Full corpus training may take multiple days.")
+        log(f"⚠ Consider using --max_steps to cap training duration.")
+        log(f"⚠ Recommended: --max_steps {TRAINING_CAPS['default_max_steps']}")
 
 
 class LegalTextDataset(Dataset):
@@ -140,12 +215,14 @@ class ProductionTrainer:
         self.args = args
         self.project_root = Path(__file__).parent
         
-        # Validate hardware
-        validate_cuda()
-        validate_bf16()
+        # =======================================================================
+        # STARTUP SAFETY CHECKS - Abort early if hardware is insufficient
+        # =======================================================================
+        self.gpu_count = validate_hardware()  # Aborts if insufficient
+        validate_bf16()                        # Aborts if BF16 not supported
+        validate_data_size(args.data_path)     # Warns if data too large
         
         self.device = torch.device("cuda")
-        self.gpu_count = torch.cuda.device_count()
         
         log(f"Initializing production trainer on {self.gpu_count} GPU(s)")
     
@@ -241,7 +318,15 @@ class ProductionTrainer:
             log(f"✓ Validation dataset loaded: {len(self.val_dataset)} samples")
     
     def compute_max_steps(self) -> int:
-        """Compute max training steps based on dataset size."""
+        """
+        Compute max training steps with SAFETY CAP.
+        
+        WHY: Prevents accidental full-corpus training (300GB = days of compute).
+        Training is capped by EITHER:
+          - User-specified --max_steps
+          - OR default_max_steps from TRAINING_CAPS
+          - OR steps_per_epoch (whichever is smaller)
+        """
         effective_batch_size = (
             self.gpu_count * 
             TRAINING_CONFIG["micro_batch_size"] * 
@@ -251,13 +336,25 @@ class ProductionTrainer:
         num_samples = len(self.train_dataset)
         steps_per_epoch = math.ceil(num_samples / effective_batch_size)
         
-        # Default to 1 epoch if not specified
-        max_steps = self.args.max_steps if self.args.max_steps else steps_per_epoch
+        # Apply safety cap: user-specified OR default cap OR epoch (whichever is smallest)
+        default_cap = TRAINING_CAPS.get("default_max_steps", 10000)
+        
+        if self.args.max_steps:
+            # User explicitly specified max_steps - respect it
+            max_steps = self.args.max_steps
+            log(f"  Using user-specified max_steps: {max_steps}")
+        else:
+            # Apply default cap to prevent runaway training
+            max_steps = min(steps_per_epoch, default_cap)
+            if steps_per_epoch > default_cap:
+                log(f"  ⚠ Dataset would require {steps_per_epoch} steps for 1 epoch")
+                log(f"  ⚠ Capping at {default_cap} steps (safety limit)")
+                log(f"  ⚠ Use --max_steps to override if intentional")
         
         log(f"  Dataset size: {num_samples}")
         log(f"  Effective batch size: {effective_batch_size}")
         log(f"  Steps per epoch: {steps_per_epoch}")
-        log(f"  Max steps: {max_steps}")
+        log(f"  Max steps (capped): {max_steps}")
         
         return max_steps
     

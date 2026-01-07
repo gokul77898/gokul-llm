@@ -1,18 +1,15 @@
 {
+  "_comment": "DeepSpeed config for 4x RTX 4090 (24GB). ZeRO-2 only. CPU offload DISABLED by default.",
   "train_batch_size": "auto",
   "train_micro_batch_size_per_gpu": 1,
   "gradient_accumulation_steps": 32,
   "gradient_clipping": 1.0,
   "zero_optimization": {
     "stage": 2,
-    "offload_optimizer": {
-      "device": "cpu",
-      "pin_memory": true
-    },
     "allgather_partitions": true,
-    "allgather_bucket_size": 5e8,
+    "allgather_bucket_size": 2e8,
     "reduce_scatter": true,
-    "reduce_bucket_size": 5e8,
+    "reduce_bucket_size": 2e8,
     "overlap_comm": true,
     "contiguous_gradients": true
   },
@@ -20,7 +17,8 @@
     "enabled": true
   },
   "fp16": {
-    "enabled": false
+    "enabled": false,
+    "_fallback_comment": "Set bf16.enabled=false and fp16.enabled=true if BF16 not supported"
   },
   "optimizer": {
     "type": "AdamW",
