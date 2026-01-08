@@ -78,3 +78,12 @@ htmlcov/
 *.pickle
 *.h5
 *.hdf5
+
+# Space-specific excludes
+*.sqlite3
+node_modules/
+chroma_db/
+db_store/
+ui/
+experts/
+*.model
