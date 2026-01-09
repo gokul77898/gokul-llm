@@ -56,9 +56,16 @@ embedding_length={len(embedding)}
 embedding_preview={embedding[:5]}
 """
         
-        # Build messages with encoder context
+        # Build messages with strict legal grounding
         messages = [
-            {"role": "system", "content": "You are an Indian legal assistant."},
+            {
+                "role": "system",
+                "content": "You are an expert in Indian criminal law. Answer strictly according to the Code of Criminal Procedure, 1973 and Indian statutes. Do NOT confuse CrPC sections. If the question refers to a specific section, explain ONLY that section. If unsure or if the section does not match the explanation, clearly say you are unsure."
+            },
+            {
+                "role": "system",
+                "content": "Important rules: Section 436 CrPC = bail in bailable offences (absolute right). Section 437 = bail in non-bailable offences. Section 389 = suspension of sentence and bail pending appeal. Never mix these sections."
+            },
             {"role": "system", "content": encoder_debug_context},
             {"role": "user", "content": query}
         ]
