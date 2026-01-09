@@ -240,7 +240,7 @@ MAX_NEW_TOKENS: int = 512
 MAX_INPUT_TOKENS: int = 4096
 
 # VRAM requirements (in GB)
-ENCODER_MIN_VRAM_GB: float = 16.0  # Indian Legal 8B
+ENCODER_MIN_VRAM_GB: float = 16.0  # Generic encoder
 DECODER_MIN_VRAM_GB: float = 48.0  # Qwen 32B (prefer ≥80GB)
 DECODER_PREFERRED_VRAM_GB: float = 80.0
 
@@ -474,89 +474,13 @@ class LocalModelRegistry:
     
     def load_encoder(self, model_id: str, device: str = "auto", dtype: str = "bfloat16") -> None:
         """
-        Load an encoder model for token classification / NER.
+        DEPRECATED: Use remote embedding service instead.
         
-        Args:
-            model_id: HuggingFace model ID
-            device: Device to load on ("auto", "cuda") - CPU NOT allowed for large models
-            dtype: Data type - MUST be "bfloat16" (enforced)
-            
-        Raises:
-            RuntimeError: If CUDA not available, insufficient VRAM, or loading fails
-            
-        PHASE P4: Updates state machine and runs warmup after load.
+        This method is kept for backward compatibility but should not be used.
+        All encoder operations should use the remote HF Space service.
         """
-        # Phase P4: Set state to LOADING
-        self._state = ModelState.LOADING
-        
-        try:
-            # ─────────────────────────────────────────────
-            # PHASE P1: GPU GUARDS (FAIL-FAST)
-            # ─────────────────────────────────────────────
-            
-            # 1. Check CUDA availability
-            check_cuda_available()
-            
-            # 2. Check VRAM requirements
-            check_vram_sufficient(ENCODER_MIN_VRAM_GB, "encoder", model_id)
-            
-            # 3. Configure torch backend (TF32, etc.)
-            configure_torch_backend()
-            
-            # 4. Enforce bfloat16 - no fp32 fallback allowed
-            if dtype != "bfloat16":
-                logger.warning(f"Overriding dtype={dtype} to bfloat16 (enforced policy)")
-                dtype = "bfloat16"
-            
-            import torch
-            from transformers import AutoTokenizer, AutoModelForTokenClassification
-            
-            # Determine torch dtype (always bfloat16)
-            torch_dtype = torch.bfloat16
-            
-            logger.info(f"Loading encoder: {model_id} (device={device}, dtype={dtype})")
-            
-            tokenizer = AutoTokenizer.from_pretrained(model_id)
-            model = AutoModelForTokenClassification.from_pretrained(
-                model_id,
-                torch_dtype=torch_dtype,
-                device_map="auto",  # Always use auto for GPU distribution
-            )
-            
-            model.eval()
-            
-            self._models[model_id] = (tokenizer, model)
-            self._configs[model_id] = ModelConfig(
-                model_id=model_id,
-                role="encoder",
-                device=device,
-                dtype=dtype,
-            )
-            self._encoder_id = model_id
-            
-            logger.info(f"Encoder loaded: {model_id}")
-            
-            # ─────────────────────────────────────────────
-            # PHASE P4: ENCODER WARMUP
-            # ─────────────────────────────────────────────
-            self._warmup_encoder(model_id)
-            
-            # Update state after successful load + warmup
-            self._update_state()
-            
-        except RuntimeError as e:
-            # Phase P4: Set state to FAILED on error
-            self._set_failed(f"Encoder load failed: {e}")
-            raise
-        except Exception as e:
-            # Wrap other exceptions - DO NOT expose raw CUDA traces
-            error_msg = str(e)
-            # Sanitize error message - remove CUDA stack traces
-            if "CUDA" in error_msg or "cuda" in error_msg:
-                error_msg = "GPU error during encoder load. Check VRAM and CUDA installation."
-            logger.error(f"Failed to load encoder {model_id}: {error_msg}")
-            self._set_failed(f"Encoder load failed: {error_msg}")
-            raise RuntimeError(f"Failed to load encoder: {error_msg}")
+        logger.warning("load_encoder is deprecated. Use remote embedding service instead.")
+        raise RuntimeError("Local encoder loading is deprecated. Use remote embedding service.")
     
     def load_decoder(self, model_id: str, device: str = "auto", dtype: str = "bfloat16") -> None:
         """

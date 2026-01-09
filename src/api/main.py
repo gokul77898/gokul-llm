@@ -3,6 +3,10 @@
 import logging
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 try:
     from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
@@ -13,21 +17,16 @@ except ImportError:
     FASTAPI_AVAILABLE = False
     logging.warning("FastAPI not available. Install with: pip install fastapi uvicorn")
 
-from src.core import get_registry
-from src.inference.model_loader import ModelLoader
-from src.pipelines.fusion_pipeline import FusionPipeline
-from src.pipelines.auto_pipeline import AutoPipeline
-from src.feedback.worker import FeedbackWorker
-from src.rag.reranker import CrossEncoderReranker
-from src.rag.grounded_generator import GroundedAnswerGenerator
-from src.core.chroma_manager import get_chroma_manager
-from src.core.response_formatter import format_chatgpt_response
-from src.common.config import get_config
-from db.chroma import VectorRetriever
+from src.inference.embedding_service import get_embedding
 from src.common import init_logger
 import os
+import requests
 
 logger = init_logger("api_server")
+
+# Remote service URLs
+EMBEDDING_SERVICE_URL = "https://omilosaisolutions-indian-legal-encoder-8b.hf.space/encode"
+HF_ENDPOINT_URL = os.environ.get("HF_ENDPOINT_URL", "")
 
 # Initialize FastAPI app
 if FASTAPI_AVAILABLE:
@@ -109,86 +108,11 @@ class HealthResponse(BaseModel):
     timestamp: str
 
 
-# Global state
-class APIState:
-    """Global API state"""
-    retriever: Optional[VectorRetriever] = None
-    fusion_pipeline: Optional[FusionPipeline] = None
-    fusion_pipelines: Dict[str, FusionPipeline] = {}
-    auto_pipeline: Optional[AutoPipeline] = None
-    chroma_manager: Optional[Any] = None
-    models_cache: Dict[str, Any] = {}
-    feedback_worker: Optional[FeedbackWorker] = None
-    reranker: Optional[CrossEncoderReranker] = None
-    grounded_generator: Optional[GroundedAnswerGenerator] = None
-
 # Initialize state
-state = APIState()
-
-# ChromaDB is initialized automatically via chroma_manager
-def initialize_chromadb():
-    """Initialize ChromaDB on startup"""
-    try:
-        logger.info("Initializing ChromaDB...")
-        chroma_manager = get_chroma_manager()
-        if chroma_manager.is_ready():
-            state.chroma_manager = chroma_manager
-            state.retriever = chroma_manager.get_retriever()
-            stats = chroma_manager.get_collection_stats()
-            doc_count = stats.get('document_count', 0)
-            logger.info(f"ChromaDB initialized (collection: legal_docs, documents: {doc_count})")
-            return True
-        else:
-            logger.warning("ChromaDB not ready")
-            return False
-    except Exception as e:
-        logger.error(f"ChromaDB initialization failed: {e}")
-        return False
-
-def get_fusion_pipeline(model: str = "mamba") -> FusionPipeline:
-    """Get or create fusion pipeline with ChromaDB retriever"""
-    if state.fusion_pipeline is None or state.fusion_pipeline.generator_model_name != model:
-        logger.info(f"Initializing fusion pipeline with model: {model}")
-        
-        # Ensure ChromaDB is initialized
-        if state.retriever is None:
-            initialize_chromadb()
-        
-        if state.retriever is not None:
-            # Create pipeline with custom retriever
-            try:
-                state.fusion_pipeline = FusionPipeline(
-                    generator_model=model,
-                    retriever_model="rag_encoder",
-                    device="cpu",
-                    top_k=5
-                )
-                # Override retriever with our ChromaDB-based one
-                state.fusion_pipeline.retriever = state.retriever
-                logger.info("Fusion pipeline initialized with ChromaDB retriever")
-            except Exception as e:
-                logger.error(f"Failed to create fusion pipeline: {e}")
-                raise HTTPException(status_code=500, detail=f"Model loading failed: {str(e)}")
-        else:
-            logger.warning("No ChromaDB retriever available, creating pipeline without retriever")
-            state.fusion_pipeline = FusionPipeline(
-                generator_model=model,
-                retriever_model="rag_encoder",
-                device="cpu",
-                top_k=5
-            )
-    
-    return state.fusion_pipeline
+state = None
 
 
-# Startup event to initialize ChromaDB
-if FASTAPI_AVAILABLE:
-    @app.on_event("startup")
-    async def startup_event():
-        """Initialize ChromaDB on application startup"""
-        logger.info("Running startup initialization...")
-        initialize_chromadb()
-        logger.info("Startup complete")
+
 
 
 # API Endpoints
@@ -314,111 +238,99 @@ if FASTAPI_AVAILABLE:
     @app.post("/query", response_model=QueryResponse)
     async def query(request: QueryRequest):
         """
-        Process a query using RAG + Generation
+        Process a query using Encoder + HF Inference Endpoint
         
         This endpoint:
-        1. Retrieves relevant documents
-        2. Generates an answer using the specified model
+        1. Gets embedding from encoder (optional)
+        2. Generates answer using HF Inference Endpoint
         3. Returns the answer with metadata
         """
         try:
-            logger.info(f"Query request: {request.query[:100]}... (auto pipeline)")
+            logger.info(f"Query request: {request.query[:100]}... (encoder + decoder)")
             
             # Validate input
             if not request.query.strip():
                 raise HTTPException(status_code=400, detail="Query cannot be empty.")
             
-            # Check if ChromaDB is initialized
-            if state.chroma_manager is None:
-                initialize_chromadb()
-            if state.chroma_manager is None:
-                raise HTTPException(status_code=404, detail="ChromaDB not initialized. Please check system status.")
+            # Get embedding from encoder (optional, may fail)
+            embedding_status = "skipped"
+            encoder_debug_context = ""
             
-            # Get fusion pipeline for auto pipeline initialization
-            if state.fusion_pipeline is None:
-                state.fusion_pipeline = get_fusion_pipeline("rl_trained")
+            try:
+                embedding = get_embedding(request.query)
+                embedding_status = "used"
+                encoder_debug_context = f"""
+[ENCODER DEBUG]
+embedding_length={len(embedding)}
+embedding_preview={embedding[:5]}
+"""
+                logger.info(f"Encoder: {embedding_status} (dim={len(embedding)})")
+            except Exception as e:
+                logger.warning(f"Encoder failed, proceeding without embedding: {e}")
+                embedding_status = "failed"
+                encoder_debug_context = "[ENCODER DEBUG: Failed - proceeding without embedding]"
             
-            if state.fusion_pipeline is None:
-                raise HTTPException(status_code=500, detail="Training model not loaded. Please load checkpoint.")
+            # Call HF Inference Endpoint
+            hf_token = os.environ.get("HF_TOKEN", "")
+            if not HF_ENDPOINT_URL:
+                raise HTTPException(status_code=404, detail="HF_ENDPOINT_URL not configured")
+            if not hf_token:
+                raise HTTPException(status_code=401, detail="HF_TOKEN not configured")
             
-            # Process query with auto pipeline
-            if state.retriever is not None:
-                logger.info("Processing query with AUTO pipeline")
+            try:
+                # Build messages with optional encoder context
+                messages = [
+                    {"role": "system", "content": "You are an Indian legal assistant."},
+                    {"role": "system", "content": encoder_debug_context},
+                    {"role": "user", "content": request.query}
+                ]
                 
-                # Initialize auto pipeline if not exists
-                if state.auto_pipeline is None:
-                    state.auto_pipeline = AutoPipeline(state.fusion_pipeline, state.retriever)
-                    logger.info("Auto pipeline initialized")
+                headers = {
+                    "Authorization": f"Bearer {hf_token}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "model": "Qwen/Qwen2.5-32B-Instruct",
+                    "lora": "nyayamitra",
+                    "messages": messages,
+                    "temperature": 0.3,
+                    "max_tokens": 300
+                }
                 
-                # Use fully automated pipeline
-                try:
-                    # Run fully automated pipeline
-                    auto_result = state.auto_pipeline.process_query(
-                        query=request.query,
-                        top_k=request.top_k
-                    )
-                    
-                    logger.info(f"Auto pipeline result - Model: {auto_result['auto_model_used']}, Confidence: {auto_result['confidence']:.3f}")
-                    
-                    # Format response in ChatGPT style
-                    formatted_answer = format_chatgpt_response(
-                        query=request.query,
-                        answer=auto_result["answer"],
-                        retrieved_docs=auto_result.get("sources", []),
-                        confidence=auto_result["confidence"]
-                    )
-                    
-                    return QueryResponse(
-                        answer=formatted_answer,
-                        query=request.query,
-                        model=auto_result["model"],
-                        auto_model_used=auto_result["auto_model_used"],
-                        retrieved_docs=auto_result["retrieved_docs"],
-                        confidence=auto_result["confidence"],
-                        latency=auto_result["latency"],
-                        ensemble=auto_result["ensemble"],
-                        metadata=auto_result["metadata"],
-                        timestamp=datetime.now().isoformat()
-                    )
-                    
-                except Exception as pipeline_error:
-                    logger.error(f"Pipeline query failed: {pipeline_error}", exc_info=True)
-                    
-                    # Fallback: Direct retrieval + simple response
-                    retrieval_result = state.retriever.retrieve(
-                        query=request.query,
-                        top_k=request.top_k
-                    )
-                    retrieved_docs = retrieval_result.documents
-                    
-                    fallback_answer = f"Auto pipeline error. Retrieved {len(retrieved_docs)} documents but generation failed: {str(pipeline_error)[:100]}..."
-                    
-                    return QueryResponse(
-                        answer=fallback_answer,
-                        query=request.query,
-                        model="auto",
-                        auto_model_used="Error - Pipeline Failed",
-                        retrieved_docs=len(retrieved_docs),
-                        confidence=0.2,
-                        latency=0.0,
-                        ensemble={},
-                        metadata={},
-                        timestamp=datetime.now().isoformat()
-                    )
-            else:
-                # No retriever available
+                decoder_response = requests.post(
+                    f"{HF_ENDPOINT_URL}/v1/chat/completions",
+                    headers=headers,
+                    json=data,
+                    timeout=60
+                )
+                decoder_response.raise_for_status()
+                result = decoder_response.json()
+                
+                # Extract answer
+                answer = result["choices"][0]["message"]["content"]
+                
+                logger.info(f"Decoder: success (encoder={embedding_status})")
+                
                 return QueryResponse(
-                    answer="No documents available for retrieval.",
+                    answer=answer,
                     query=request.query,
-                    model="auto",
-                    auto_model_used="No Retriever Available",
-                    retrieved_docs=0,
-                    confidence=0.1,
-                    latency=0.0,
+                    model="Qwen2.5-32B-Instruct + LoRA",
+                    auto_model_used="nyayamitra",
+                    retrieved_docs=0,  # No RAG for now
+                    confidence=0.85 if embedding_status == "used" else 0.75,
+                    latency=0.0,  # Could measure if needed
                     ensemble={},
-                    metadata={},
+                    metadata={
+                        "encoder_status": embedding_status,
+                        "decoder": "hf_endpoint",
+                        "lora": "nyayamitra"
+                    },
                     timestamp=datetime.now().isoformat()
                 )
+                
+            except Exception as decoder_error:
+                logger.error(f"Decoder failed: {decoder_error}")
+                raise HTTPException(status_code=500, detail=f"Decoder failed: {str(decoder_error)}")
             
         except Exception as e:
             logger.error(f"Query failed: {e}", exc_info=True)
@@ -550,6 +462,111 @@ if FASTAPI_AVAILABLE:
             'models': models_info,
             'count': len(models_info)
         }
+
+
+if FASTAPI_AVAILABLE:
+    
+    class E2ETestRequest(BaseModel):
+        """E2E test request - bypasses RAG"""
+        query: str = Field(..., description="User query")
+    
+    class E2ETestResponse(BaseModel):
+        """E2E test response"""
+        query: str
+        embedding_dim: int
+        answer: str
+        embedding_status: str
+        decoder_status: str
+        timestamp: str
+    
+    @app.post("/test-e2e", response_model=E2ETestResponse)
+    async def test_e2e(request: E2ETestRequest):
+        """
+        End-to-end test endpoint - bypasses RAG
+        
+        1. Calls encoder Space for embedding (validates encoder)
+        2. Calls HF Inference Endpoint for generation (validates decoder)
+        3. Returns both results
+        """
+        embedding_status = "not_called"
+        decoder_status = "not_called"
+        embedding_dim = 0
+        answer = ""
+        
+        # Step 1: Call embedding service
+        try:
+            embedding_response = requests.post(
+                EMBEDDING_SERVICE_URL,
+                json={"query": request.query},
+                timeout=30
+            )
+            embedding_response.raise_for_status()
+            embedding_data = embedding_response.json()
+            embedding_dim = embedding_data.get("embedding_dim", 0)
+            embedding_status = f"ok (dim={embedding_dim})"
+        except Exception as e:
+            embedding_status = f"error: {str(e)[:100]}"
+        
+        # Step 2: Get embedding and call HF Inference Endpoint
+        hf_token = os.environ.get("HF_TOKEN", "")
+        if not HF_ENDPOINT_URL:
+            decoder_status = "error: HF_ENDPOINT_URL not set"
+        elif not hf_token:
+            decoder_status = "error: HF_TOKEN not set"
+        else:
+            try:
+                # Get embedding from encoder
+                embedding = get_embedding(request.query)
+                
+                # Create debug context
+                encoder_debug_context = f"""
+[ENCODER DEBUG]
+embedding_length={len(embedding)}
+embedding_preview={embedding[:5]}
+"""
+                
+                # Build messages with encoder context
+                messages = [
+                    {"role": "system", "content": "You are an Indian legal assistant."},
+                    {"role": "system", "content": encoder_debug_context},
+                    {"role": "user", "content": request.query}
+                ]
+                
+                headers = {
+                    "Authorization": f"Bearer {hf_token}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "model": "Qwen/Qwen2.5-32B-Instruct",
+                    "lora": "nyayamitra",
+                    "messages": messages,
+                    "temperature": 0.3,
+                    "max_tokens": 200
+                }
+                decoder_response = requests.post(
+                    f"{HF_ENDPOINT_URL}/v1/chat/completions",
+                    headers=headers,
+                    json=data,
+                    timeout=60
+                )
+                decoder_response.raise_for_status()
+                result = decoder_response.json()
+                
+                # Extract answer from OpenAI format
+                answer = result["choices"][0]["message"]["content"]
+                
+                decoder_status = "ok"
+            except Exception as e:
+                decoder_status = f"error: {str(e)[:100]}"
+        
+        return E2ETestResponse(
+            query=request.query,
+            embedding_dim=embedding_dim,
+            answer=answer,
+            embedding_status=embedding_status,
+            decoder_status=decoder_status,
+            timestamp=datetime.now().isoformat()
+        )
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False):

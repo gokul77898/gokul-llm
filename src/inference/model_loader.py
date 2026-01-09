@@ -17,11 +17,11 @@ class ModelLoader:
     
     Usage:
         loader = ModelLoader(device="cuda")
-        encoder = loader.load_encoder("model-name")
         decoder = loader.load_decoder("model-name")
     
     Rules:
-    - Encoder and decoder are loaded explicitly
+    - Decoder is loaded explicitly
+    - Encoder uses remote embedding service
     - No magic abstraction
     - No global state
     - No shared singleton
@@ -33,8 +33,8 @@ class ModelLoader:
         self.device = device
 
     def load_encoder(self, name):
-        """Load encoder model locally."""
-        return self.registry.load_encoder(name)
+        """DEPRECATED: Use remote embedding service instead."""
+        raise RuntimeError("Local encoder loading is deprecated. Use remote embedding service.")
 
     def load_decoder(self, name):
         """Load decoder model locally."""
