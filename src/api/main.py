@@ -19,6 +19,10 @@ except ImportError:
 
 from src.inference.embedding_service import get_embedding
 from src.common import init_logger
+from src.core.chroma_manager import get_chroma_manager
+from src.graph.graph_rag_filter import GraphRAGFilter
+from src.graph.legal_graph_traverser import LegalGraphTraverser
+from src.graph.legal_graph_builder import LegalGraphBuilder
 import os
 import requests
 
@@ -63,6 +67,9 @@ class QueryResponse(BaseModel):
     model: str
     auto_model_used: str
     retrieved_docs: int
+    graph_allowed_docs: int = 0
+    graph_excluded_docs: int = 0
+    grounded: bool = True
     confidence: float
     latency: float
     ensemble: Dict[str, float]
@@ -238,103 +245,239 @@ if FASTAPI_AVAILABLE:
     @app.post("/query", response_model=QueryResponse)
     async def query(request: QueryRequest):
         """
-        Process a query using Encoder + HF Inference Endpoint
+        Process a query using RAG + Graph-RAG + Decoder
         
-        This endpoint:
-        1. Gets embedding from encoder (optional)
-        2. Generates answer using HF Inference Endpoint
-        3. Returns the answer with metadata
+        CANONICAL PIPELINE:
+        1. Validate input (query, top_k)
+        2. (Optional) Call encoder → embedding
+        3. Retrieve documents from ChromaDB → REFUSE if zero
+        4. Run Graph-RAG filtering → REFUSE if zero allowed
+        5. Build evidence block from allowed_chunks
+        6. Inject evidence into USER message
+        7. Call decoder (UNCHANGED)
+        8. Validate answer grounding
+        9. Return structured response
         """
+        import time
+        start_time = time.time()
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 1: VALIDATE INPUT
+        # ═══════════════════════════════════════════════════════════════
+        if not request.query.strip():
+            raise HTTPException(status_code=400, detail="Query cannot be empty.")
+        
+        top_k = min(request.top_k, 10)  # Cap at 10
+        logger.info(f"Query: {request.query[:100]}... (RAG + Graph-RAG pipeline)")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 2: (OPTIONAL) ENCODER EMBEDDING
+        # ═══════════════════════════════════════════════════════════════
+        embedding_status = "skipped"
         try:
-            logger.info(f"Query request: {request.query[:100]}... (encoder + decoder)")
-            
-            # Validate input
-            if not request.query.strip():
-                raise HTTPException(status_code=400, detail="Query cannot be empty.")
-            
-            # Get embedding from encoder (optional, may fail)
-            embedding_status = "skipped"
-            encoder_debug_context = ""
-            
-            try:
-                embedding = get_embedding(request.query)
-                embedding_status = "used"
-                encoder_debug_context = f"""
-[ENCODER DEBUG]
-embedding_length={len(embedding)}
-embedding_preview={embedding[:5]}
-"""
-                logger.info(f"Encoder: {embedding_status} (dim={len(embedding)})")
-            except Exception as e:
-                logger.warning(f"Encoder failed, proceeding without embedding: {e}")
-                embedding_status = "failed"
-                encoder_debug_context = "[ENCODER DEBUG: Failed - proceeding without embedding]"
-            
-            # Call HF Inference Endpoint
-            hf_token = os.environ.get("HF_TOKEN", "")
-            if not HF_ENDPOINT_URL:
-                raise HTTPException(status_code=404, detail="HF_ENDPOINT_URL not configured")
-            if not hf_token:
-                raise HTTPException(status_code=401, detail="HF_TOKEN not configured")
-            
-            try:
-                # Build messages with optional encoder context
-                messages = [
-                    {"role": "system", "content": "You are an Indian legal assistant."},
-                    {"role": "system", "content": encoder_debug_context},
-                    {"role": "user", "content": request.query}
-                ]
-                
-                headers = {
-                    "Authorization": f"Bearer {hf_token}",
-                    "Content-Type": "application/json"
-                }
-                data = {
-                    "model": "Qwen/Qwen2.5-32B-Instruct",
-                    "lora": "nyayamitra",
-                    "messages": messages,
-                    "temperature": 0.3,
-                    "max_tokens": 300
-                }
-                
-                decoder_response = requests.post(
-                    f"{HF_ENDPOINT_URL}/v1/chat/completions",
-                    headers=headers,
-                    json=data,
-                    timeout=60
-                )
-                decoder_response.raise_for_status()
-                result = decoder_response.json()
-                
-                # Extract answer
-                answer = result["choices"][0]["message"]["content"]
-                
-                logger.info(f"Decoder: success (encoder={embedding_status})")
-                
-                return QueryResponse(
-                    answer=answer,
-                    query=request.query,
-                    model="Qwen2.5-32B-Instruct + LoRA",
-                    auto_model_used="nyayamitra",
-                    retrieved_docs=0,  # No RAG for now
-                    confidence=0.85 if embedding_status == "used" else 0.75,
-                    latency=0.0,  # Could measure if needed
-                    ensemble={},
-                    metadata={
-                        "encoder_status": embedding_status,
-                        "decoder": "hf_endpoint",
-                        "lora": "nyayamitra"
-                    },
-                    timestamp=datetime.now().isoformat()
-                )
-                
-            except Exception as decoder_error:
-                logger.error(f"Decoder failed: {decoder_error}")
-                raise HTTPException(status_code=500, detail=f"Decoder failed: {str(decoder_error)}")
-            
+            embedding = get_embedding(request.query)
+            embedding_status = "used"
+            logger.info(f"Encoder: OK (dim={len(embedding)})")
         except Exception as e:
-            logger.error(f"Query failed: {e}", exc_info=True)
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.warning(f"Encoder failed (non-blocking): {e}")
+            embedding_status = "failed"
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 3: RAG RETRIEVAL FROM CHROMADB (REQUIRED)
+        # ═══════════════════════════════════════════════════════════════
+        chroma_manager = get_chroma_manager()
+        if not chroma_manager.is_ready():
+            logger.error("ChromaDB not initialized - HARD FAILURE")
+            raise HTTPException(status_code=500, detail="ChromaDB not initialized. Cannot proceed without retrieval.")
+        
+        retriever = chroma_manager.get_retriever()
+        if retriever is None:
+            logger.error("ChromaDB retriever not available - HARD FAILURE")
+            raise HTTPException(status_code=500, detail="ChromaDB retriever not available.")
+        
+        # Retrieve documents
+        retrieved_results = retriever.query(request.query, top_k=top_k)
+        
+        if not retrieved_results:
+            logger.warning(f"Zero documents retrieved for query: {request.query[:50]}")
+            raise HTTPException(status_code=400, detail="No relevant legal documents found. Please refine your query.")
+        
+        logger.info(f"Retrieved {len(retrieved_results)} documents from ChromaDB")
+        
+        # Convert to dict format for Graph-RAG
+        retrieved_chunks = []
+        for r in retrieved_results:
+            chunk = {
+                "id": r.id,
+                "text": r.text,
+                "score": r.score,
+                "act": r.metadata.get("act", ""),
+                "section": r.metadata.get("section", ""),
+                "source": r.metadata.get("source", ""),
+                "doc_type": r.metadata.get("doc_type", ""),
+                "metadata": r.metadata
+            }
+            retrieved_chunks.append(chunk)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 4: GRAPH-RAG FILTERING (REQUIRED)
+        # ═══════════════════════════════════════════════════════════════
+        try:
+            # Initialize graph components
+            graph_builder = LegalGraphBuilder()
+            traverser = LegalGraphTraverser(graph_builder.graph)
+            graph_filter = GraphRAGFilter(traverser)
+            
+            # Filter chunks using graph constraints
+            filter_result = graph_filter.filter_chunks(request.query, retrieved_chunks)
+            
+            allowed_chunks = filter_result.allowed_chunks
+            excluded_count = filter_result.total_excluded
+            
+            logger.info(f"Graph-RAG: {len(allowed_chunks)} allowed, {excluded_count} excluded")
+            
+        except Exception as graph_error:
+            logger.error(f"Graph-RAG filter failed - HARD FAILURE: {graph_error}")
+            raise HTTPException(status_code=500, detail=f"Graph-RAG filter failed: {str(graph_error)}")
+        
+        # Check if all chunks were filtered out
+        if not allowed_chunks:
+            logger.warning(f"All chunks filtered by Graph-RAG for query: {request.query[:50]}")
+            raise HTTPException(
+                status_code=400, 
+                detail="Query blocked by legal consistency rules. All retrieved documents were filtered due to section/case inconsistencies."
+            )
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 5: BUILD EVIDENCE BLOCK (STRICT FORMAT)
+        # ═══════════════════════════════════════════════════════════════
+        evidence_lines = ["[LEGAL EVIDENCE]"]
+        for i, chunk in enumerate(allowed_chunks[:5]):  # Max 5 chunks
+            source_info = chunk.get("source", "Unknown")
+            act = chunk.get("act", "")
+            section = chunk.get("section", "")
+            
+            source_label = f"Source {i+1}"
+            if act and section:
+                source_label += f" ({act} Section {section})"
+            elif source_info:
+                source_label += f" ({source_info})"
+            
+            evidence_lines.append(f"\n{source_label}:")
+            evidence_lines.append(chunk["text"])
+        
+        evidence_block = "\n".join(evidence_lines)
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 6: BUILD USER MESSAGE WITH EVIDENCE
+        # ═══════════════════════════════════════════════════════════════
+        user_message_with_evidence = f"""Answer the question strictly using the legal evidence below.
+If the answer is not fully supported by the evidence, say so explicitly.
+
+{evidence_block}
+
+Question:
+{request.query}"""
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 7: CALL DECODER (UNCHANGED PARAMETERS)
+        # ═══════════════════════════════════════════════════════════════
+        hf_token = os.environ.get("HF_TOKEN", "")
+        if not HF_ENDPOINT_URL:
+            raise HTTPException(status_code=500, detail="HF_ENDPOINT_URL not configured")
+        if not hf_token:
+            raise HTTPException(status_code=500, detail="HF_TOKEN not configured")
+        
+        try:
+            messages = [
+                {
+                    "role": "system",
+                    "content": "You are an expert in Indian criminal law. Answer strictly according to the Code of Criminal Procedure, 1973 and Indian statutes. Do NOT confuse CrPC sections. If the question refers to a specific section, explain ONLY that section. If unsure or if the section does not match the explanation, clearly say you are unsure."
+                },
+                {
+                    "role": "system",
+                    "content": "Important rules: Section 436 CrPC = bail in bailable offences (absolute right). Section 437 = bail in non-bailable offences. Section 389 = suspension of sentence and bail pending appeal. Never mix these sections."
+                },
+                {"role": "user", "content": user_message_with_evidence}
+            ]
+            
+            headers = {
+                "Authorization": f"Bearer {hf_token}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "model": "Qwen/Qwen2.5-32B-Instruct",
+                "lora": "nyayamitra",
+                "messages": messages,
+                "temperature": 0.3,
+                "max_tokens": 300
+            }
+            
+            decoder_response = requests.post(
+                f"{HF_ENDPOINT_URL}/v1/chat/completions",
+                headers=headers,
+                json=data,
+                timeout=60
+            )
+            decoder_response.raise_for_status()
+            result = decoder_response.json()
+            
+            answer = result["choices"][0]["message"]["content"]
+            
+        except Exception as decoder_error:
+            logger.error(f"Decoder failed: {decoder_error}")
+            raise HTTPException(status_code=500, detail=f"Decoder failed: {str(decoder_error)}")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 8: POST-GENERATION VALIDATION (GROUNDING CHECK)
+        # ═══════════════════════════════════════════════════════════════
+        grounded = True
+        
+        # Check if answer references evidence (basic heuristic)
+        answer_lower = answer.lower()
+        evidence_keywords = []
+        for chunk in allowed_chunks[:5]:
+            # Extract key terms from evidence
+            text_words = chunk["text"].lower().split()[:20]
+            evidence_keywords.extend(text_words)
+        
+        # Count how many evidence keywords appear in answer
+        keyword_matches = sum(1 for kw in evidence_keywords if kw in answer_lower and len(kw) > 4)
+        
+        if keyword_matches < 3:
+            # Answer may not be grounded in evidence
+            grounded = False
+            logger.warning(f"Answer may not be grounded (keyword_matches={keyword_matches})")
+        
+        # ═══════════════════════════════════════════════════════════════
+        # STEP 9: RETURN STRUCTURED RESPONSE
+        # ═══════════════════════════════════════════════════════════════
+        latency = time.time() - start_time
+        
+        logger.info(f"Query completed: retrieved={len(retrieved_chunks)}, allowed={len(allowed_chunks)}, grounded={grounded}, latency={latency:.2f}s")
+        
+        return QueryResponse(
+            answer=answer,
+            query=request.query,
+            model="Qwen2.5-32B-Instruct + LoRA",
+            auto_model_used="nyayamitra",
+            retrieved_docs=len(retrieved_chunks),
+            graph_allowed_docs=len(allowed_chunks),
+            graph_excluded_docs=excluded_count,
+            grounded=grounded,
+            confidence=0.9 if grounded else 0.6,
+            latency=latency,
+            ensemble={},
+            metadata={
+                "encoder_status": embedding_status,
+                "decoder": "hf_endpoint",
+                "lora": "nyayamitra",
+                "rag": "chromadb",
+                "graph_filter": "active",
+                "evidence_chunks": len(allowed_chunks)
+            },
+            timestamp=datetime.now().isoformat()
+        )
     
     @app.post("/rag-search", response_model=RAGSearchResponse)
     async def rag_search(request: RAGSearchRequest):
